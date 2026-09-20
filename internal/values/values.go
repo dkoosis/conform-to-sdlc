@@ -31,11 +31,40 @@ type Exception struct {
 	Reason string `json:"reason"`
 }
 
-// Values is one repo's conform.json: its profile plus its declared
-// exceptions.
+// KeptName is one name the stale-name rule must not sweep. A rename normally
+// leaves nothing behind, so this list is empty in a repo that keeps no
+// history in its prose; it exists for the file that must go on saying a dead
+// word — a changelog, a migration note, an ADR recording what the word used
+// to be.
+//
+// It carries a reason for the same purpose an Exception does: the reason is
+// what a later reader needs to decide whether the entry is still earning its
+// place. There is no bare name.
+type KeptName struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+// Values is one repo's conform.json: its profile, its declared exceptions,
+// and the names its prose may keep after Go drops them.
 type Values struct {
 	Profile    Profile     `json:"profile"`
 	Exceptions []Exception `json:"exceptions"`
+	KeepNames  []KeptName  `json:"keepNames,omitempty"`
+}
+
+// KeptNames indexes KeepNames for lookup by the stale-name rule.
+func (v Values) KeptNames() map[string]bool {
+	if len(v.KeepNames) == 0 {
+		return nil
+	}
+
+	kept := make(map[string]bool, len(v.KeepNames))
+	for _, k := range v.KeepNames {
+		kept[k.Name] = true
+	}
+
+	return kept
 }
 
 var (
@@ -49,6 +78,10 @@ var (
 	// ErrDuplicateRule marks two exceptions in the same file declaring the
 	// same rule id.
 	ErrDuplicateRule = errors.New("duplicate exception rule")
+	// ErrEmptyName marks a keepNames entry with an empty name.
+	ErrEmptyName = errors.New("keepNames entry must name a word")
+	// ErrDuplicateName marks two keepNames entries holding the same name.
+	ErrDuplicateName = errors.New("duplicate keepNames entry")
 	// ErrTrailingData marks non-whitespace content after the top-level JSON
 	// object — a sign the file holds more than one document.
 	ErrTrailingData = errors.New("trailing data after JSON object")
@@ -129,6 +162,24 @@ func (v *Values) validate() error {
 		}
 
 		seen[exc.Rule] = true
+	}
+
+	kept := make(map[string]bool, len(v.KeepNames))
+
+	for i, k := range v.KeepNames {
+		if k.Name == "" {
+			return fmt.Errorf("keepNames %d: %w", i, ErrEmptyName)
+		}
+
+		if k.Reason == "" {
+			return fmt.Errorf("keepNames %d (name %q): %w", i, k.Name, ErrEmptyReason)
+		}
+
+		if kept[k.Name] {
+			return fmt.Errorf("keepNames %d (name %q): %w", i, k.Name, ErrDuplicateName)
+		}
+
+		kept[k.Name] = true
 	}
 
 	return nil

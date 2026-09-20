@@ -59,6 +59,7 @@ const (
 	RuleRootMinimal  = "root-minimal"      // no CLAUDE.md / ROADMAP.md / conform.json / NORTH_STAR.md at the root
 	RuleSandboxLib   = "sandbox-lib"       // .sandbox/lib matches the canonical copy conform ships
 	RuleAgentsStub   = "agents-stub"       // root AGENTS.md stays a pointer, never content
+	RuleStaleName    = "stale-name"        // a name this branch removed from Go still referenced outside it
 )
 
 // Finding is one contract violation: which file, which rule, what to run.
@@ -93,6 +94,7 @@ func Run(dir string) []Finding {
 	findings = append(findings, checkRootMinimal(dir)...)
 	findings = append(findings, checkAgentsStub(dir)...)
 	findings = append(findings, checkSandboxLib(dir)...)
+	findings = append(findings, checkStaleNames(dir, vals.KeptNames())...)
 
 	findings = applyExceptions(findings, vals)
 	sort.SliceStable(findings, func(i, j int) bool {

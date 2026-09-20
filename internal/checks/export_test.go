@@ -56,3 +56,10 @@ func RootStrayNames() []string {
 	}
 	return names
 }
+
+// Stale-name rule hooks (cfm-hvj). RemovedNames is exported on its own so the
+// diff parser can be tested without a git repo behind it.
+var (
+	CheckStaleNames = checkStaleNames
+	RemovedNames    = removedNames
+)
