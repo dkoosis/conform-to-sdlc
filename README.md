@@ -13,7 +13,7 @@ Three surfaces, because the three kinds of state live in three places:
 |---|---|---|
 | `conform-to-sdlc` | in-repo files: Makefile verbs, `.golangci.yml` core, single pin, CI-calls-make-check behind a docs-only skip, bd config | every `make check`, hard-fail |
 | `conform-to-sdlc --local` | machine wiring CI can't see: `core.hooksPath`, hooks executable, dolt remote | `make doctor`, session start |
-| `conform-to-sdlc --fleet` | GitHub: branch protection, labels, merge policy, PR template | promulgation + pin-bump sweeps |
+| `conform-to-sdlc --fleet` | GitHub: branch protection, labels, merge policy | promulgation + pin-bump sweeps |
 | `conform-to-sdlc --fix` | the same in-repo files, but writes the ones that are simply absent, then checks | adopting a new rule; scaffolding |
 
 Principles:
