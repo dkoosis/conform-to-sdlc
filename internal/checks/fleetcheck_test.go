@@ -27,9 +27,8 @@ func ghStub(responses map[string]string) func(context.Context, string) ([]byte, 
 func conformingRepoResponses(full string) map[string]string {
 	return map[string]string{
 		"repos/" + full: `{"default_branch":"main","allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":true}`,
-		"repos/" + full + "/branches/main/protection":                  `{"required_status_checks":{"strict":false,"contexts":["check"]},"enforce_admins":{"enabled":true}}`,
-		"repos/" + full + "/labels?per_page=100":                       `[{"name":"codex-review"},{"name":"bug"}]`,
-		"repos/" + full + "/contents/.github/pull_request_template.md": `{"content":""}`,
+		"repos/" + full + "/branches/main/protection": `{"required_status_checks":{"strict":false,"contexts":["check"]},"enforce_admins":{"enabled":true}}`,
+		"repos/" + full + "/labels?per_page=100":      `[{"name":"codex-review"},{"name":"bug"}]`,
 	}
 }
 
@@ -58,11 +57,10 @@ func TestRunFleet_ConformingFleet(t *testing.T) {
 }
 
 // TestRunFleet_StockRepo: one repo left on GitHub's defaults trips the three
-// settings rules (pr-template moved to Surface 1 in v0.2.0), and every
-// finding names the repo and carries a gh repair.
+// settings rules, and every finding names the repo and carries a gh repair.
 func TestRunFleet_StockRepo(t *testing.T) {
 	responses := allFleetResponses(conformingRepoResponses)
-	// snipe goes stock: no protection, stock labels, everything-on merges, no template.
+	// snipe goes stock: no protection, stock labels, everything-on merges.
 	delete(responses, "repos/dkoosis/snipe/branches/main/protection")
 	responses["repos/dkoosis/snipe"] = `{"default_branch":"main","allow_squash_merge":true,"allow_merge_commit":true,"allow_rebase_merge":true,"delete_branch_on_merge":false}`
 	responses["repos/dkoosis/snipe/labels?per_page=100"] = `[{"name":"bug"},{"name":"enhancement"}]`

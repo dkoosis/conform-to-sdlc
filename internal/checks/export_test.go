@@ -45,7 +45,6 @@ func SetGHAPI(f func(ctx context.Context, path string) ([]byte, error)) func() {
 var ErrNotFound = errNotFound
 
 // v0.2.0 test hooks.
-var CheckPRTemplate = checkPRTemplate
 
 // CheckReadme is the readme rule's verify half (sd-mzgy.5).
 var CheckReadme = checkReadme

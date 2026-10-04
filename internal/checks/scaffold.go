@@ -4,7 +4,7 @@ package checks
 // verify half that reads a repo file and decides whether it satisfies the
 // contract; the renderer below writes those same files FROM THE SAME
 // package variables — checkFloor, floorEnable, requiredVerbs, bdKeys,
-// trackedHookEvents, pinFile, prTemplatePaths, bdConfigFile.
+// trackedHookEvents, pinFile, bdConfigFile.
 //
 // That sharing is the whole point of building `conform-to-sdlc init` instead of
 // adopting a copier template (decision conform-to-sdlc-init-build-thin, sd-th5.24):
@@ -142,7 +142,6 @@ var baseArtifacts = []artifact{
 	{path: ".golangci.yml", mode: 0o644, body: renderGolangci},
 	{path: pinFile, mode: 0o644, body: renderProjectConf},
 	{path: ciGateFile, mode: 0o644, body: renderCheckWorkflow},
-	{path: prTemplatePaths[0], mode: 0o644, body: renderPRTemplate},
 	{path: bdConfigFile, mode: 0o644, dirMode: 0o700, body: renderBDConfig},
 	{path: "go.mod", mode: 0o644, body: renderGoMod},
 	{path: "doc.go", mode: 0o644, body: renderDoc},
@@ -456,23 +455,6 @@ jobs:
         if: needs.detect.outputs.run_check == 'true'
         run: make check
 `
-
-func renderPRTemplate(spec ScaffoldSpec) string {
-	return `## What changed
-
-<!-- One sentence. The bead id belongs in the commit subject, not here. -->
-
-## Why
-
-<!-- The outcome this delivers, not the diff restated. -->
-
-## Verification
-
-- [ ] ` + "`make check`" + ` green
-- [ ] ` + "`conform-to-sdlc`" + ` green
-- [ ] acceptance criteria of the bead met
-`
-}
 
 // renderBDConfig emits the tracked bd declaration from bdKeys — the same
 // slice checkBDConfig walks. A fourth required key added to that slice lands
