@@ -35,11 +35,10 @@ func TestReadme_CommentThenProseIsStillAFinding(t *testing.T) {
 }
 
 // TestFix_NamesTheRepoFromGoModNotTheDirectory: --fix run inside a worktree
-// titled trixi's roadmap "# conform-rename" after the worktree's directory.
+// titled trixi's page "# conform-rename" after the worktree's directory.
 func TestFix_NamesTheRepoFromGoModNotTheDirectory(t *testing.T) {
 	t.Parallel()
 	files := goodRepo()
-	delete(files, checks.RoadmapFile)
 	delete(files, checks.ReadmeFile)
 	files["go.mod"] = "module github.com/dkoosis/widget\n\ngo 1.26\n"
 	dir := writeRepo(t, files)
@@ -50,13 +49,11 @@ func TestFix_NamesTheRepoFromGoModNotTheDirectory(t *testing.T) {
 	if _, err := checks.Fix(wt); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{checks.RoadmapFile, checks.ReadmeFile} {
-		body, err := os.ReadFile(filepath.Join(wt, f))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if strings.Contains(string(body), "some-worktree-name") || !strings.Contains(string(body), "widget") {
-			t.Errorf("%s names the directory, not the module:\n%s", f, body)
-		}
+	body, err := os.ReadFile(filepath.Join(wt, checks.ReadmeFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "some-worktree-name") || !strings.Contains(string(body), "widget") {
+		t.Errorf("%s names the directory, not the module:\n%s", checks.ReadmeFile, body)
 	}
 }

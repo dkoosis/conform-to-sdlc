@@ -23,7 +23,7 @@ import (
 func Fix(dir string) ([]string, error) {
 	var done []string
 
-	for _, fix := range []func(string) (string, error){fixReadme, fixRoadmap, fixCheckWorkflow} {
+	for _, fix := range []func(string) (string, error){fixReadme, fixCheckWorkflow} {
 		created, err := fix(dir)
 		if err != nil {
 			return done, err
@@ -34,37 +34,6 @@ func Fix(dir string) ([]string, error) {
 	}
 
 	return done, nil
-}
-
-// fixRoadmap writes a docs/ROADMAP.md skeleton when the repo has no epic inventory.
-//
-// A NORTH_STAR.md sitting beside it does not stop this. The two coexist by
-// design — the kg's page is the source of direction and this one mirrors its ★
-// line over an epic list — so writing the skeleton is right even then, and the
-// finding's repair says to copy the ★ line across.
-func fixRoadmap(dir string) (string, error) {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(abs, RoadmapFile)
-	if _, err := os.Stat(path); err == nil {
-		return "", nil // present — its ★ line is the checker's business, not ours
-	} else if !os.IsNotExist(err) {
-		return "", err
-	}
-	body := RoadmapSkeleton(repoName(abs))
-	// docs/ may not exist yet in a repo that never had a direction home.
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return "", err
-	}
-	// 0o600: the file is world-readable the moment git tracks it, so a wider
-	// mode here buys nothing and trips gosec. #nosec is a worse answer than a
-	// mode that is simply correct.
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("created %s — copy the ★ line from the kg's %s, then list the epics", RoadmapFile, NorthStarFile), nil
 }
 
 // fixReadme writes a README.md skeleton when the repo root carries none.
@@ -84,8 +53,9 @@ func fixReadme(dir string) (string, error) {
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}
-	// 0o600 for the same reason fixRoadmap uses it: git makes the file
-	// world-readable the moment it tracks it, so a wider mode buys nothing.
+	// 0o600: the file is world-readable the moment git tracks it, so a wider
+	// mode here buys nothing and trips gosec. #nosec is a worse answer than a
+	// mode that is simply correct.
 	if err := os.WriteFile(path, []byte(ReadmeSkeleton(repoName(abs))), 0o600); err != nil {
 		return "", err
 	}
@@ -97,7 +67,7 @@ func fixReadme(dir string) (string, error) {
 // ci-docs-skip read. An existing workflow is never touched — its extra steps
 // are a person's to port.
 //
-// Unlike the README and ROADMAP skeletons this file is not left red: a CI
+// Unlike the README skeleton this file is not left red: a CI
 // workflow carries no prose a person must still write, and the rendered file
 // is the whole repair.
 func fixCheckWorkflow(dir string) (string, error) {
@@ -110,7 +80,7 @@ func fixCheckWorkflow(dir string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return "", err
 	}
-	// 0o600 for the same reason fixRoadmap uses it.
+	// 0o600 for the same reason fixReadme uses it.
 	if err := os.WriteFile(path, []byte(renderCheckWorkflow(ScaffoldSpec{})), 0o600); err != nil {
 		return "", err
 	}
@@ -119,7 +89,7 @@ func fixCheckWorkflow(dir string) (string, error) {
 
 // repoName is the last element of the module path in dir's go.mod, falling
 // back to the directory name. The directory alone is wrong in a worktree:
-// --fix run there titled trixi's roadmap after the worktree.
+// --fix run there titled trixi's README after the worktree.
 func repoName(dir string) string {
 	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 	if err == nil {

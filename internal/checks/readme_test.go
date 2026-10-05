@@ -98,7 +98,7 @@ func TestScaffold_EmitsAPassingReadme(t *testing.T) {
 		t.Fatalf("scaffold emitted no %s: %v", checks.ReadmeFile, err)
 	}
 	if !strings.HasPrefix(string(body), "# widget\n") {
-		t.Fatalf("scaffolded README does not open naming the repo: %q", firstLine(string(body)))
+		t.Fatalf("scaffolded README does not open naming the repo:\n%s", body)
 	}
 	if got := checks.CheckReadme(dir); len(got) != 0 {
 		t.Fatalf("scaffolded README fails its own rule: %+v", got)

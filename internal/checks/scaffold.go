@@ -145,7 +145,6 @@ var baseArtifacts = []artifact{
 	{path: bdConfigFile, mode: 0o644, dirMode: 0o700, body: renderBDConfig},
 	{path: "go.mod", mode: 0o644, body: renderGoMod},
 	{path: "doc.go", mode: 0o644, body: renderDoc},
-	{path: RoadmapFile, mode: 0o644, body: renderRoadmap},
 	{path: VocabularyFile, mode: 0o644, body: renderVocabulary},
 }
 
@@ -512,14 +511,6 @@ func renderGoMod(spec ScaffoldSpec) string {
 
 // renderDoc gives `go build ./...` and `go vet ./...` a package to chew on,
 // so `make check` is runnable the moment the skeleton lands.
-// renderRoadmap emits the direction home. It is the one artifact whose body a
-// human must replace before it says anything, so it ships the init variant of
-// the shared page — a ★ line the checker accepts and a reader can see is
-// unwritten (checks.RoadmapScaffold).
-func renderRoadmap(spec ScaffoldSpec) string {
-	return RoadmapScaffold(spec.Repo)
-}
-
 // renderReadme emits the one file the root must carry, through the same
 // renderer the readme rule's --fix half uses (checks.ReadmeScaffold).
 func renderReadme(spec ScaffoldSpec) string {

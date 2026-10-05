@@ -41,13 +41,12 @@ func TestRootMinimal_EachStrayIsAFinding(t *testing.T) {
 	}
 }
 
-// TestRun_RootStrayFailsTheGate: a root ROADMAP.md fails Run even when
-// docs/ROADMAP.md is present and correct — two roadmaps is the drift the
-// rule exists to stop.
+// TestRun_RootStrayFailsTheGate: a root ROADMAP.md fails Run in an otherwise
+// conforming repo.
 func TestRun_RootStrayFailsTheGate(t *testing.T) {
 	t.Parallel()
 	files := goodRepo()
-	files["ROADMAP.md"] = files[checks.RoadmapFile]
+	files["ROADMAP.md"] = "# repo\n"
 	dir := writeRepo(t, files)
 	var hit bool
 	for _, f := range checks.Run(dir) {
@@ -56,6 +55,6 @@ func TestRun_RootStrayFailsTheGate(t *testing.T) {
 		}
 	}
 	if !hit {
-		t.Fatal("root ROADMAP.md beside docs/ROADMAP.md: want a root-minimal finding, got none")
+		t.Fatal("root ROADMAP.md: want a root-minimal finding, got none")
 	}
 }
