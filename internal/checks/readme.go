@@ -22,10 +22,9 @@ const ReadmeFile = "README.md"
 // heading (readme).
 //
 // Three failures, deliberately distinct. Absent means the repo page has no
-// first paragraph at all. Present-but-empty is worse in the way an empty
-// roadmap is: the file exists, so every reader stops looking. Present with no
-// opening heading is the shape GitHub renders as a wall of prose with nothing
-// naming what it is looking at.
+// first paragraph at all. Present-but-empty is worse: the file exists, so
+// every reader stops looking. Present with no opening heading is the shape
+// GitHub renders as a wall of prose with nothing naming what it is looking at.
 //
 // What is NOT checked: whether the heading matches the repo's name. Nothing in
 // a repo states its own canonical name — a worktree, a fork, a clone under
@@ -33,7 +32,7 @@ const ReadmeFile = "README.md"
 // other, and go.mod is absent under the lib and non-Go profiles. A checker
 // that compared the heading to filepath.Base(dir) would fire on every
 // worktree in the fleet, so this rule guards the artifact's existence and its
-// one machine-read line, the same bargain checkRoadmap strikes with the ★.
+// one machine-read line.
 func checkReadme(dir string) []Finding {
 	data, err := os.ReadFile(filepath.Join(dir, ReadmeFile))
 	if err != nil {
@@ -83,7 +82,7 @@ func hasOpeningHeading(body string) bool {
 // ReadmeSkeleton renders a starting README.md for `conform-to-sdlc --fix` to drop into
 // an existing repo. Its opening line is a prompt and NOT a heading, so a repo
 // that runs --fix and stops still fails the readme rule and says why, rather
-// than passing with a page nobody wrote. Same bargain as RoadmapSkeleton.
+// than passing with a page nobody wrote.
 func ReadmeSkeleton(repo string) string {
 	return readmeDoc(repo, readmeFixOpening(repo))
 }
@@ -133,7 +132,7 @@ go install github.com/dkoosis/` + repo + `/cmd/` + repo + `@latest
 make check
 ` + "```" + `
 
-Direction lives in ` + RoadmapFile + `; the work lives in bd (` + "`bd ready`" + `).
+The work lives in bd (` + "`bd ready`" + `).
 `
 }
 

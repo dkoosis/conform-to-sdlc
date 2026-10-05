@@ -28,5 +28,17 @@ Principles:
   human wrote, and the skeleton it writes is deliberately still red — a
   scaffold that passed the gate would read as work done and carry none.
 
+Non-goals:
+
+- Being a template tool. Templates drift the moment they are copied; that is
+  the problem this exists to replace.
+- Soft-fail or warning levels. A rule earns hard-fail or it is deleted.
+- Per-repo variants of the contract. A repo declares an exception by rule id
+  in `docs/conform.json`, with a reason — it does not fork the rule.
+- Formatting or style opinions already owned by `.golangci.yml`.
+- Requiring what sdlc has no place for. sdlc's `SPEC.md` says where an epic's
+  state and the North Star live; a rule here that asks a repo for another copy
+  is deleted.
+
 Reference repo: [ferret](https://github.com/dkoosis/ferret). Distributed as a
 pinned Go module; adopting a new rule version is a deliberate PR per repo.

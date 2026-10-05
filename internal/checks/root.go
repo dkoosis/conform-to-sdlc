@@ -11,7 +11,7 @@ import (
 // (./kg) meets a repo cwd (sd-mzgy.6, mnemd and memorybench, 2026-09-02).
 //
 // The root is minimal and a root entry earns its place (decision d9cd0e20868b,
-// dk 2026-09-02): README.md is the one file the root must carry, direction
+// dk 2026-09-02): README.md is the one file the root must carry, other
 // documents live under docs/, and .claude/rules/** is the whole project
 // instruction set — there is no CLAUDE.md. A file stays at the root only when
 // some tool reads it there by name and nothing else can serve it
@@ -34,8 +34,8 @@ var rootStrays = []struct{ name, msg, repair string }{
 	},
 	{
 		name:   "ROADMAP.md",
-		msg:    "direction documents live under docs/ — the root is minimal",
-		repair: "git mv ROADMAP.md " + RoadmapFile,
+		msg:    "no roadmap at the root — an epic's state lives on its bead (sdlc SPEC.md, R11), and the root is minimal",
+		repair: "git rm ROADMAP.md, or git mv ROADMAP.md docs/ROADMAP.md while the repo still reads it",
 	},
 	{
 		name:   "conform.json",
@@ -45,7 +45,7 @@ var rootStrays = []struct{ name, msg, repair string }{
 	{
 		name:   "NORTH_STAR.md",
 		msg:    "a Publish-To reflection of the kg's page lives under docs/ — the root is minimal",
-		repair: "git mv NORTH_STAR.md " + NorthStarFile + " (and repoint the publish target)",
+		repair: "git mv NORTH_STAR.md docs/NORTH_STAR.md (and repoint the publish target)",
 	},
 	{
 		name:   "kg",

@@ -54,7 +54,6 @@ const (
 	RuleBDConfig        = "bd-config"         // bd config keys present
 	RuleHooksShape      = "hooks-shape"       // shape B: tracked .githooks
 	RuleReadme          = "readme"            // README.md present, non-empty, opening with a heading
-	RuleRoadmap         = "roadmap"           // ROADMAP.md present, carrying a ★ destination line
 	RuleRootMinimal     = "root-minimal"      // no CLAUDE.md / ROADMAP.md / conform.json / NORTH_STAR.md at the root
 	RuleSandboxLib      = "sandbox-lib"       // .sandbox/lib matches the canonical copy conform-to-sdlc ships
 	RuleAgentsStub      = "agents-stub"       // root AGENTS.md stays a pointer, never content
@@ -92,7 +91,6 @@ func Run(dir string) []Finding {
 	findings = append(findings, checkHooksShape(dir)...)
 	findings = append(findings, checkHookExitDiscard(dir)...)
 	findings = append(findings, checkReadme(dir)...)
-	findings = append(findings, checkRoadmap(dir)...)
 	findings = append(findings, checkRootMinimal(dir)...)
 	findings = append(findings, checkAgentsStub(dir)...)
 	findings = append(findings, checkSandboxLib(dir)...)

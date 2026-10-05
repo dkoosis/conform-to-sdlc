@@ -112,7 +112,6 @@ func goodRepo() map[string]string {
 		".github/workflows/check.yml":        goodCheckYML,
 		".github/workflows/codex-review.yml": goodCodexYML,
 		"README.md":                          "# repo\n\nwhat this repo is, in one paragraph.\n",
-		"docs/ROADMAP.md":                    "# repo\n\n★ ship the thing, for dk\n\n## Milestones\n\n1. first → bd-1\n",
 		".githooks/pre-commit":               "#!/bin/sh\nexit 0\n",
 		".githooks/pre-push":                 "#!/bin/sh\nexit 0\n",
 		checks.VocabularyFile:                "",
@@ -147,4 +146,19 @@ func rulesOf(findings []checks.Finding) map[string]int {
 		rules[f.Rule]++
 	}
 	return rules
+}
+
+// findingFor returns the single finding for rule, failing the test otherwise.
+func findingFor(t *testing.T, findings []checks.Finding, rule string) checks.Finding {
+	t.Helper()
+	var hits []checks.Finding
+	for _, f := range findings {
+		if f.Rule == rule {
+			hits = append(hits, f)
+		}
+	}
+	if len(hits) != 1 {
+		t.Fatalf("want exactly one %s finding, got %d (all findings: %v)", rule, len(hits), findings)
+	}
+	return hits[0]
 }
