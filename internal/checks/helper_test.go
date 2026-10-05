@@ -114,7 +114,6 @@ func goodRepo() map[string]string {
 		"README.md":                          "# repo\n\nwhat this repo is, in one paragraph.\n",
 		".githooks/pre-commit":               "#!/bin/sh\nexit 0\n",
 		".githooks/pre-push":                 "#!/bin/sh\nexit 0\n",
-		checks.VocabularyFile:                "",
 	}
 }
 
@@ -146,19 +145,4 @@ func rulesOf(findings []checks.Finding) map[string]int {
 		rules[f.Rule]++
 	}
 	return rules
-}
-
-// findingFor returns the single finding for rule, failing the test otherwise.
-func findingFor(t *testing.T, findings []checks.Finding, rule string) checks.Finding {
-	t.Helper()
-	var hits []checks.Finding
-	for _, f := range findings {
-		if f.Rule == rule {
-			hits = append(hits, f)
-		}
-	}
-	if len(hits) != 1 {
-		t.Fatalf("want exactly one %s finding, got %d (all findings: %v)", rule, len(hits), findings)
-	}
-	return hits[0]
 }

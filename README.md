@@ -40,5 +40,10 @@ Non-goals:
   state and the North Star live; a rule here that asks a repo for another copy
   is deleted.
 
+The sdlc repo does not pin this checker. It is a Claude Code plugin with a
+smaller floor of its own, stated in its `AGENTS.md`; the rules here about how a
+repo steers agents match how sdlc does it, and the Makefile, lint and CI rules
+are the fleet's, for the Go tools.
+
 Reference repo: [ferret](https://github.com/dkoosis/ferret). Distributed as a
 pinned Go module; adopting a new rule version is a deliberate PR per repo.

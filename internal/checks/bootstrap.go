@@ -75,8 +75,8 @@ func BootstrapPlan(spec ScaffoldSpec) []Step {
 			//
 			// --skip-agents: bd's own default init writes AGENTS.md,
 			// CLAUDE.md, .claude/settings.json and a Codex skill install —
-			// none part of this contract, and the first two trip
-			// conform-to-sdlc's own agents-stub and root-minimal rules,
+			// none part of this contract, and the first carries a managed
+			// block that trips conform-to-sdlc's own agents-managed-block rule,
 			// breaking reportInitResult's "one call produces a passing
 			// repo" claim the moment bd init is allowed to finish (cfm-d4r).
 			Why:      "bd needs a store before " + bdConfigFile + " has a live counterpart",

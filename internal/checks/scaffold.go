@@ -145,7 +145,6 @@ var baseArtifacts = []artifact{
 	{path: bdConfigFile, mode: 0o644, dirMode: 0o700, body: renderBDConfig},
 	{path: "go.mod", mode: 0o644, body: renderGoMod},
 	{path: "doc.go", mode: 0o644, body: renderDoc},
-	{path: VocabularyFile, mode: 0o644, body: renderVocabulary},
 }
 
 // scaffoldArtifacts is the skeleton, one entry per file. The paths are the
@@ -520,17 +519,6 @@ func renderReadme(spec ScaffoldSpec) string {
 func renderDoc(spec ScaffoldSpec) string {
 	return fmt.Sprintf("// Package %s is the root of the %s module.\n//\n// Scaffolded by `conform-to-sdlc init`. Replace this file with real code.\npackage %s\n",
 		goIdent(spec.Repo), spec.Repo, goIdent(spec.Repo))
-}
-
-// renderVocabulary emits the starting .claude/rules/vocabulary.md: a place
-// for the repo's own domain words, not content the checker reads (it only
-// checks the file is present).
-func renderVocabulary(ScaffoldSpec) string {
-	return `# Vocabulary
-
-This repo's own domain words — one definition each. Not sdlc's process
-vocabulary; that is a separate, shared standard.
-`
 }
 
 // goIdent turns a repo name into a legal package identifier.
