@@ -1,6 +1,6 @@
-# Agent Instructions
+# conform-to-sdlc
 
-Project instructions live in `.claude/rules/` — every `*.md` there, loaded
-recursively. Read them. Nothing in this file is authoritative.
+`README.md` says what this is: the surfaces, the principles and the non-goals. A rule here must not ask a repo for what sdlc's `SPEC.md` has no place for.
 
-Task tracking is bd: run `bd prime`.
+- `make check` is the gate; it ends by running this checker on this repo.
+- Work is in bd (`bd ready`). A PR opens with `sdlc ship`.
