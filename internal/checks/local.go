@@ -216,6 +216,9 @@ func checkReviewGate(ctx context.Context, dir string) []Finding {
 		}}
 	}
 
+	if !filepath.IsAbs(global) {
+		global = filepath.Join(dir, global) // git runs hooks from the work tree
+	}
 	globalPush := filepath.Join(global, "pre-push")
 	gfi, gStatErr := os.Stat(globalPush)
 	gdata, gReadErr := os.ReadFile(globalPush)
