@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -49,11 +50,13 @@ type Step struct {
 	// repo that need not exist yet — a clone failure there must not strand
 	// a scaffolded repo half-wired.
 	Optional bool
+	// Env holds NAME=value pairs added to the command's environment.
+	Env []string
 }
 
 // String renders the step as the shell line a human would type.
 func (s Step) String() string {
-	return strings.Join(s.Argv, " ")
+	return strings.Join(append(slices.Clone(s.Env), s.Argv...), " ")
 }
 
 // BootstrapPlan is the ordered list of steps for a spec, local first. It is
@@ -67,6 +70,14 @@ func BootstrapPlan(spec ScaffoldSpec) []Step {
 			Argv: []string{"git", "init", "-b", defaultBranch},
 		},
 		{
+			// bd init runs `git commit` internally. Under global forwarding
+			// the global pre-commit forwards to the tracked .githooks one,
+			// which delegates to the .beads/hooks shim bd init itself is
+			// mid-install of — a nested `bd` call that contends with this
+			// still-running `bd init` for the same Dolt lock and hangs
+			// until the bootstrap timeout kills it (cfm-d4r). noHooksEnv
+			// gives bd's own commit no hooks at all.
+			//
 			// --skip-agents: bd's own default init writes AGENTS.md,
 			// CLAUDE.md, .claude/settings.json and a Codex skill install —
 			// none part of this contract, and the first carries a managed
@@ -75,6 +86,7 @@ func BootstrapPlan(spec ScaffoldSpec) []Step {
 			// repo" claim the moment bd init is allowed to finish (cfm-d4r).
 			Why:      "bd needs a store before " + bdConfigFile + " has a live counterpart",
 			Argv:     []string{"bd", "init", "--prefix", spec.Prefix, "--non-interactive", "--skip-agents"},
+			Env:      noHooksEnv,
 			Optional: true,
 		},
 	}
@@ -95,6 +107,10 @@ func BootstrapPlan(spec ScaffoldSpec) []Step {
 	}
 	return append(steps, remoteSteps(full)...)
 }
+
+// noHooksEnv points core.hooksPath at /dev/null for every git command a step
+// runs, through git's environment config (GIT_CONFIG_COUNT), so no hook fires.
+var noHooksEnv = []string{"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=core.hooksPath", "GIT_CONFIG_VALUE_0=/dev/null"}
 
 // defaultBranch is the branch --fleet protects.
 const defaultBranch = "main"
@@ -235,6 +251,9 @@ func runStep(ctx context.Context, dir string, step Step) error {
 	// running a named command is the point of a bootstrap step.
 	cmd := exec.CommandContext(ctx, step.Argv[0], step.Argv[1:]...)
 	cmd.Dir = dir
+	if len(step.Env) > 0 {
+		cmd.Env = append(os.Environ(), step.Env...)
+	}
 	if step.Argv[len(step.Argv)-1] == "-" {
 		cmd.Stdin = strings.NewReader(ProtectionPayload())
 	}
