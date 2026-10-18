@@ -126,6 +126,21 @@ func TestHyperfineDownloadIsCheckedAndBounded(t *testing.T) {
 	}
 }
 
+// Sonar shell:S6505 on fo's synced lib-setup.sh (cfm-qdj): a global npm
+// install that runs lifecycle scripts lets a compromised jscpd dependency run
+// code at setup time.
+func TestJscpdInstallSkipsLifecycleScripts(t *testing.T) {
+	files, err := sandbox.Files()
+	if err != nil {
+		t.Fatalf("Files: %v", err)
+	}
+	for line := range strings.Lines(string(files["lib-setup.sh"])) {
+		if strings.Contains(line, "npm install -g jscpd") && !strings.Contains(line, "--ignore-scripts") {
+			t.Errorf("lib-setup.sh installs jscpd without --ignore-scripts: %s", strings.TrimSpace(line))
+		}
+	}
+}
+
 func TestSyncWritesThenReportsNoChange(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, sandbox.LibDir), 0o755); err != nil {
