@@ -72,7 +72,7 @@ func TestHooksShape(t *testing.T) {
 		wantMsg string
 	}{
 		{
-			name: "shape B: tracked executable pre-commit and pre-push",
+			name: "tracked executable pre-commit and pre-push",
 			files: map[string]string{
 				".githooks/pre-commit": "#!/bin/sh\nexit 0\n",
 				".githooks/pre-push":   "#!/bin/sh\nexit 0\n",
@@ -81,7 +81,7 @@ func TestHooksShape(t *testing.T) {
 		{
 			name:    "no .githooks directory",
 			files:   map[string]string{},
-			wantMsg: "shape B is the one accepted hook shape",
+			wantMsg: "the one home for a repo's hooks",
 		},
 		{
 			name: "pre-push missing",

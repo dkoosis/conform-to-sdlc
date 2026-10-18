@@ -52,7 +52,7 @@ const (
 	RuleCodexShape      = "codex-workflow"       // codex-review fires on issue_comment, never pull_request
 	RuleRetiredFiles    = "retired-files"        // files folded into conform-to-sdlc are gone
 	RuleBDConfig        = "bd-config"            // bd config keys present
-	RuleHooksShape      = "hooks-shape"          // shape B: tracked .githooks
+	RuleHooksShape      = "hooks-shape"          // tracked .githooks the global hooks forward to
 	RuleReadme          = "readme"               // README.md present, non-empty, opening with a heading
 	RuleRootMinimal     = "root-minimal"         // no ROADMAP.md / conform.json / NORTH_STAR.md / kg at the root
 	RuleSandboxLib      = "sandbox-lib"          // .sandbox/lib matches the canonical copy conform-to-sdlc ships

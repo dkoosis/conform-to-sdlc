@@ -6,7 +6,7 @@ package checks
 // no file can carry.
 //
 // The split that matters here is local vs remote. Local steps (git init,
-// core.hooksPath, bd init, bd config) touch only the target directory and
+// bd init, bd config) touch only the target directory and
 // this machine, so init runs them. Remote steps (labels, branch protection,
 // merge policy) create state in a real GitHub account, so they are INERT by
 // default: init prints them and runs them only when the caller passes
@@ -14,8 +14,10 @@ package checks
 // execution.
 //
 // Every command below is the repair string of the rule it satisfies —
-// checkHooksPath's `git config core.hooksPath`, labelFindings' `gh label
-// create`, protectionFindings' protection PUT, mergePolicyFindings' PATCH.
+// labelFindings' `gh label create`, protectionFindings' protection PUT,
+// mergePolicyFindings' PATCH. No step sets core.hooksPath: under global
+// forwarding (decision 51900b14be55) no repo sets a local one, and the
+// global hooks dir is machine wiring, not a repo's.
 // One vocabulary, whether conform-to-sdlc is reporting a gap or closing it.
 
 import (
@@ -65,14 +67,6 @@ func BootstrapPlan(spec ScaffoldSpec) []Step {
 			Argv: []string{"git", "init", "-b", defaultBranch},
 		},
 		{
-			// bd init runs `git commit` internally. Wiring core.hooksPath
-			// before that commit would fire the tracked pre-commit hook,
-			// which delegates to the .beads/hooks shim bd init itself is
-			// mid-install of — a nested `bd` call that contends with this
-			// still-running `bd init` for the same Dolt lock and hangs
-			// until the bootstrap timeout kills it (cfm-d4r). Wiring hooks
-			// after gives bd's own commit git's default (empty) hooks.
-			//
 			// --skip-agents: bd's own default init writes AGENTS.md,
 			// CLAUDE.md, .claude/settings.json and a Codex skill install —
 			// none part of this contract, and the first carries a managed
@@ -82,11 +76,6 @@ func BootstrapPlan(spec ScaffoldSpec) []Step {
 			Why:      "bd needs a store before " + bdConfigFile + " has a live counterpart",
 			Argv:     []string{"bd", "init", "--prefix", spec.Prefix, "--non-interactive", "--skip-agents"},
 			Optional: true,
-		},
-		{
-			// checkHooksPath's repair, verbatim.
-			Why:  RuleHooksPath + ": git must read hooks from the tracked " + hooksDir,
-			Argv: []string{"git", "config", "core.hooksPath", hooksDir},
 		},
 	}
 	// checkBDLive compares the live bd config against the tracked
