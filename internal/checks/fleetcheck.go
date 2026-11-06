@@ -24,7 +24,7 @@ import (
 const (
 	// RuleBranchProtection — main requires the `check` status, strict:false
 	// (parallel agent PRs make strict a re-run tax — deliberate amendment of
-	// trixi's pattern), enforce_admins on.
+	// the earlier pattern), enforce_admins on.
 	RuleBranchProtection = "branch-protection"
 	// RuleFleetLabels — the fleet label set present. Floor is codex-review
 	// (the on-demand review trigger); D9 expansion lands in fleetLabels.

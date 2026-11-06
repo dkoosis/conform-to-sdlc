@@ -54,7 +54,7 @@ func renderDocsOnlyRegex() string {
 
 // docsOnlyMatch finds the ignore set in a detect job's run script: the
 // parenthesized alternation an awk `$2 !~ /(…)/` tests each changed path
-// against. trixi's check.yml is the reference shape.
+// against. The detect job in a conforming check.yml pairs this match with a git-diff awk filter.
 var docsOnlyMatch = regexp.MustCompile(`\$2\s*!~\s*/\((.*?)\)/`)
 
 // checkCIDocsSkip verifies check.yml skips the gate for a docs-only pull
@@ -136,7 +136,7 @@ func docsSkipFindings(wf *workflow, file string) []Finding {
 				File:   file,
 				Rule:   RuleCIDocsSkip,
 				Msg:    fmt.Sprintf("detect job %q's run_check output is a fixed value that never varies with the diff — a non-docs change can never flip it true, so make check never runs", g.detectJob),
-				Repair: `write run_check from the match's own result (see trixi's check.yml: run_check="$(... | awk ...)"; echo "run_check=${run_check:-false}"), not a literal`,
+				Repair: `write run_check from the match's own result (for example run_check="$(... | awk ...)"; echo "run_check=${run_check:-false}"), not a literal`,
 			})
 		}
 	}
@@ -191,7 +191,7 @@ var runCheckOutput = regexp.MustCompile(`run_check=([^"\s]*)`)
 // outputIsDynamic reports whether some run_check write in job's steps derives
 // its value from a shell expansion (the diff's match result) rather than a
 // fixed literal. A job may legitimately hard-code one branch true (an
-// unknown base — trixi's shape) as long as another line ties the ordinary
+// unknown base) as long as another line ties the ordinary
 // case to the actual match; a job that only ever writes a literal can never
 // flip the gate on for a non-docs change.
 func outputIsDynamic(job *workflowJob) bool {

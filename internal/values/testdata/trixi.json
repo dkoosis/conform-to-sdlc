@@ -1,6 +1,0 @@
-{
-  "profile": "tool",
-  "exceptions": [
-    {"rule": "incubator-extras", "reason": "trixi is the incubator repo; carries experimental scaffolding (extra scripts, exploratory configs) other fleet repos don't declare"}
-  ]
-}

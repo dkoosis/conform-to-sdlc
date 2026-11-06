@@ -2,13 +2,11 @@
   "repos": [
     {"name": "ferret", "visibility": "public"},
     {"name": "snipe", "visibility": "public"},
-    {"name": "trixi-bot", "visibility": "private"},
     {"name": "canapay", "visibility": "private"},
     {"name": "fo", "visibility": "public"},
     {"name": "loto", "visibility": "public"},
     {"name": "strand", "visibility": "public"},
     {"name": "npharvester", "visibility": "private"},
-    {"name": "trixi", "visibility": "private"},
     {"name": "atomicfile", "visibility": "public"},
     {"name": "keyring", "visibility": "private"},
     {"name": "next", "visibility": "public"},

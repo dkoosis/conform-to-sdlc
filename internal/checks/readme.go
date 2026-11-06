@@ -137,7 +137,7 @@ The work lives in bd (` + "`bd ready`" + `).
 }
 
 // isHTMLComment reports whether line is a whole one-line HTML comment. It
-// renders as nothing, so trixi's KG-publish banner on line 1 does not hide the
+// renders as nothing, so an auto-publish banner on line 1 does not hide the
 // heading under it.
 func isHTMLComment(line string) bool {
 	s := strings.TrimSpace(line)

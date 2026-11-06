@@ -7,7 +7,7 @@ import (
 
 // rootStrays are the entries that must not sit at the repo root (root-minimal).
 // Three files, plus kg/: a vault directory inside a repo is
-// never intended — it is what `trixi set` leaves when its --kg-root default
+// never intended — it is what a nug writer leaves when its --kg-root default
 // (./kg) meets a repo cwd (sd-mzgy.6, mnemd and memorybench, 2026-09-02).
 //
 // The root is minimal and a root entry earns its place (decision d9cd0e20868b,
@@ -39,7 +39,7 @@ var rootStrays = []struct{ name, msg, repair string }{
 	},
 	{
 		name:   "kg",
-		msg:    "a vault inside the repo — a nug writer defaulted its root to ./kg (trixi set) instead of $MNEMD_NUGBASE",
+		msg:    "a vault inside the repo — a nug writer defaulted its root to ./kg instead of $MNEMD_NUGBASE",
 		repair: "move the nugs into $MNEMD_NUGBASE with mnemd capture or mnemd index, then rm -r kg",
 	},
 }

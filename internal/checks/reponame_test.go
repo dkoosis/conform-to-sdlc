@@ -11,11 +11,11 @@ import (
 
 // TestReadme_LeadingHTMLCommentStillPasses: a comment renders as nothing, so
 // like a blank line it must not stand between the page and its heading.
-// trixi's KG-publish banner sits on line 1 by its own contract.
+// An auto-publish banner sits on line 1 by its own contract.
 func TestReadme_LeadingHTMLCommentStillPasses(t *testing.T) {
 	t.Parallel()
 	files := goodRepo()
-	files[checks.ReadmeFile] = "<!-- auto-published from KG -->\n# trixi\n\nprose.\n"
+	files[checks.ReadmeFile] = "<!-- auto-published from KG -->\n# demo\n\nprose.\n"
 	dir := writeRepo(t, files)
 	if got := checks.CheckReadme(dir); len(got) != 0 {
 		t.Fatalf("leading HTML comment: want no findings, got %+v", got)
@@ -35,7 +35,7 @@ func TestReadme_CommentThenProseIsStillAFinding(t *testing.T) {
 }
 
 // TestFix_NamesTheRepoFromGoModNotTheDirectory: --fix run inside a worktree
-// titled trixi's page "# conform-rename" after the worktree's directory.
+// titled the wrong page "# conform-rename" after the worktree's directory.
 func TestFix_NamesTheRepoFromGoModNotTheDirectory(t *testing.T) {
 	t.Parallel()
 	files := goodRepo()

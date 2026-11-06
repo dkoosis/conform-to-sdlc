@@ -168,7 +168,7 @@ jobs:
 func TestCIDocsSkip(t *testing.T) {
 	t.Parallel()
 
-	trixi, err := os.ReadFile("testdata/fixtures/trixi.check.yml")
+	shape, err := os.ReadFile("testdata/fixtures/fleet-shape.check.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +184,8 @@ func TestCIDocsSkip(t *testing.T) {
 			yml:  goodCheckYML,
 		},
 		{
-			name: "trixi's check.yml shape",
-			yml:  string(trixi),
+			name: "fleet-shape check.yml",
+			yml:  string(shape),
 		},
 		{
 			name: "absent workflow is ci-gate's finding, not this rule's",
@@ -341,11 +341,11 @@ func TestFix_LeavesExistingCheckWorkflowBytes(t *testing.T) {
 
 // TestCIDocsSkip_Budget: the rule sits on the in-check surface, <1s.
 func TestCIDocsSkip_Budget(t *testing.T) {
-	trixi, err := os.ReadFile("testdata/fixtures/trixi.check.yml")
+	shape, err := os.ReadFile("testdata/fixtures/fleet-shape.check.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := writeRepo(t, map[string]string{".github/workflows/check.yml": string(trixi)})
+	dir := writeRepo(t, map[string]string{".github/workflows/check.yml": string(shape)})
 
 	start := time.Now()
 	checks.CheckCIDocsSkip(dir)

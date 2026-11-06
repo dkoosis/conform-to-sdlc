@@ -1,6 +1,6 @@
 name: check
 
-# GitHub-hosted runners (replaces the self-hosted `trixi-mini` box, which wedged
+# GitHub-hosted runners (replaces a self-hosted box, which wedged
 # CI on a runner-local phantom: `scripts/lint-locked: line 66: File: unbound
 # variable` from a divergent checked-out script + a missing `gh`. A fresh hosted
 # checkout runs the repo's real scripts, so that phantom can't recur).
@@ -13,7 +13,7 @@ name: check
 #   schedule / dispatch: ubuntu-latest + macos-latest — the darwin gate runs once
 #                        nightly (and on demand), NOT on every merge. TRADE: a
 #                        darwin-only break is caught the next morning, not at
-#                        merge — acceptable, reversible (trixi-ntss). macOS at 10x
+#                        merge — acceptable, reversible. macOS at 10x
 #                        on every push was the dominant CI cost.
 #
 # Docs-only mergeability: branch protection requires the `check (ubuntu-latest)`
@@ -53,7 +53,7 @@ jobs:
   # Ignored set (mirrors the former paths-ignore): markdown, docs/, .beads/,
   # .claude/, .gitignore, LICENSE. Anything else → run the full gate.
   #
-  # Subset CI was RETIRED in the single-module collapse (trixi-module-collapse):
+  # Subset CI was RETIRED in the single-module collapse:
   # scripts/changed-modules governed per-module test scoping that no longer
   # exists now that everything is one module. `make check` always runs the full
   # `./...` gate; the diff step below only decides docs-only fast-skip.
@@ -106,7 +106,7 @@ jobs:
 
   check:
     needs: detect
-    # macОS is the 10x-billed leg (trixi-ntss), so it runs only where it earns
+    # macОS is the 10x-billed leg, so it runs only where it earns
     # its keep:
     #   - schedule / workflow_dispatch → macOS-ONLY. The weekly darwin backstop;
     #     ubuntu is skipped here because every PR + push-to-main already runs the
@@ -219,7 +219,7 @@ jobs:
           key: ${{ runner.os }}-gotools-glci${{ env.GOLANGCI_LINT_VERSION }}-fo${{ env.FO_VERSION }}
 
       # Lint tools: versions come from .sandbox/project.conf (the ONE pin
-      # location, conform lint-pin; trixi-xaps is why fo is pinned, not @latest
+      # location, conform lint-pin; fo is pinned, not @latest
       # — make check depends on `fo wrap diag`, released in v0.2.3). `go
       # install` builds them on whichever OS the matrix leg runs (no vendored
       # darwin binaries exist) into GOBIN (set above, already on PATH). Each

@@ -89,7 +89,7 @@ func fixCheckWorkflow(dir string) (string, error) {
 
 // repoName is the last element of the module path in dir's go.mod, falling
 // back to the directory name. The directory alone is wrong in a worktree:
-// --fix run there titled trixi's README after the worktree.
+// --fix run there titled the wrong README after the worktree.
 func repoName(dir string) string {
 	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 	if err == nil {

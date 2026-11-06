@@ -27,12 +27,12 @@ func TestLoad_Valid(t *testing.T) {
 			},
 		},
 		{
-			name: "trixi: tool profile, incubator-extras exception",
-			file: "testdata/trixi.json",
+			name: "incubator: tool profile, incubator-extras exception",
+			file: "testdata/incubator.json",
 			want: values.Values{
 				Profile: values.ProfileTool,
 				Exceptions: []values.Exception{
-					{Rule: "incubator-extras", Reason: "trixi is the incubator repo; carries experimental scaffolding (extra scripts, exploratory configs) other fleet repos don't declare"},
+					{Rule: "incubator-extras", Reason: "this repo is the incubator; carries experimental scaffolding (extra scripts, exploratory configs) other fleet repos don't declare"},
 				},
 			},
 		},
