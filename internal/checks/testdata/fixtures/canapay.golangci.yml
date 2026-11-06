@@ -1,6 +1,6 @@
 version: "2"
 
-# Ported from trixi 2026-06-11 (canapay-3hb). Trixi-specific depguard
+# Ported from a stricter config 2026-06-11 (canapay-3hb). Depguard
 # architecture rules and path exclusions dropped; add canapay depguard rules
 # when package boundaries are worth enforcing.
 
@@ -138,8 +138,8 @@ linters:
         - unlambda
     forbidigo:
       # bugclasses rule 5: context.Background() deep in daemon/server code
-      # should thread the caller/shutdown ctx (strand st-47z, trixi #606,
-      # trixi-bot gg-8rq.3, canapay can-x38 — the MCP-server variant, now
+      # should thread the caller/shutdown ctx (strand st-47z,
+      # canapay can-x38 — the MCP-server variant, now
       # fixed). Path-scoped in exclusions below to canapay's daemon/network
       # surface. Types-aware so a `ctx.Background` field can't misfire.
       analyze-types: true
@@ -214,7 +214,7 @@ linters:
           - unparam
         path: _test\.go
       # wrapcheck: test files wrap nothing meaningful — boundary wrapping is a
-      # production-code concern (trixi-u6q)
+      # production-code concern
       - linters:
           - wrapcheck
         path: _test\.go

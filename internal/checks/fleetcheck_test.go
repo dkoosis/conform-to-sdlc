@@ -35,7 +35,7 @@ func conformingRepoResponses(full string) map[string]string {
 // allFleetResponses maps every roster repo to the same canned answers.
 func allFleetResponses(shape func(full string) map[string]string) map[string]string {
 	responses := map[string]string{}
-	for _, name := range []string{"ferret", "snipe", "trixi-bot", "canapay", "fo", "loto", "strand", "npharvester", "trixi", "atomicfile", "keyring", "next", "conform-to-sdlc"} {
+	for _, name := range []string{"ferret", "snipe", "canapay", "fo", "loto", "strand", "npharvester", "atomicfile", "keyring", "next", "conform-to-sdlc"} {
 		maps.Copy(responses, shape("dkoosis/"+name))
 	}
 	return responses
@@ -94,7 +94,7 @@ func TestRunFleet_StockRepo(t *testing.T) {
 // their own named drift.
 func TestRunFleet_ProtectionShape(t *testing.T) {
 	responses := allFleetResponses(conformingRepoResponses)
-	responses["repos/dkoosis/trixi/branches/main/protection"] = `{"required_status_checks":{"strict":true,"contexts":["check (ubuntu-latest)"]},"enforce_admins":{"enabled":true}}`
+	responses["repos/dkoosis/strand/branches/main/protection"] = `{"required_status_checks":{"strict":true,"contexts":["check (ubuntu-latest)"]},"enforce_admins":{"enabled":true}}`
 	restore := checks.SetGHAPI(ghStub(responses))
 	defer restore()
 
@@ -105,7 +105,7 @@ func TestRunFleet_ProtectionShape(t *testing.T) {
 
 	var strictHit, contextHit bool
 	for _, f := range findings {
-		if f.File != "dkoosis/trixi" || f.Rule != checks.RuleBranchProtection {
+		if f.File != "dkoosis/strand" || f.Rule != checks.RuleBranchProtection {
 			continue
 		}
 		if strings.Contains(f.Msg, "strict:true") {
@@ -116,7 +116,7 @@ func TestRunFleet_ProtectionShape(t *testing.T) {
 		}
 	}
 	if !strictHit || !contextHit {
-		t.Errorf("want strict + context findings for trixi, got %v", findings)
+		t.Errorf("want strict + context findings for strand, got %v", findings)
 	}
 }
 

@@ -1,4 +1,4 @@
-# golangci-lint configuration for fo (strict — modeled on trixi)
+# golangci-lint configuration for fo (strict)
 version: "2"
 
 run:
@@ -134,8 +134,8 @@ linters:
         - unlambda
     forbidigo:
       # bugclasses rule 5: context.Background() deep in daemon/long-lived code
-      # should thread the caller/shutdown ctx (strand st-47z, trixi #606,
-      # trixi-bot gg-8rq.3, canapay can-x38). Path-scoped below to fo's
+      # should thread the caller/shutdown ctx (strand st-47z,
+      # canapay can-x38). Path-scoped below to fo's
       # long-lived paths (watch/stream); noise everywhere else, so the
       # exclusions rule carves out the CLI entrypoint, cmd wiring, and tests.
       # Types-aware so a `ctx.Background` field can't false-fire.

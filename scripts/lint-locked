@@ -21,9 +21,8 @@
 # still holds golangci-lint's own internal cache lock, and the wrapped run would
 # then die exit-3. So we also pass --allow-parallel-runners to `run`: that
 # disables golangci-lint's fail-fast internal lock, leaving this wrapper's mkdir
-# mutex as the sole, authoritative serializer (trixi-wudg / rorp Problem B).
+# mutex as the sole, authoritative serializer (rorp Problem B).
 #
-# Bead: trixi-tr1t, trixi-wudg
 # Wired into: make lint / scan / check-pkg / CHECK_CMD / REPORT_CMD (via $(GOLANGCILINT))
 #
 # ---------------------------------------------------------------------------
@@ -33,7 +32,7 @@
 # GOLANGCI_LINT_VERSION in .sandbox/project.conf — so a brew upgrade drifted
 # the linter actually run away from the pin with no warning, and a new minor's
 # new findings could turn the gate red with nothing wrong in the tree (that
-# exact drift turned trixi's gate red on 2026-09-07: 17 findings from
+# exact drift turned a gate red on 2026-09-07: 17 findings from
 # golangci-lint 2.13.2 that its pinned 2.12.2 does not produce).
 #
 # So: every candidate is asked its version and must match the pin. Nothing
@@ -164,7 +163,7 @@ lock_dir="${cache_dir}.lintlock"
 # that relocates GOCACHE off ~/.cache AND disables setup-go caching leaves
 # ~/.cache (or ~/Library/Caches) uncreated, so our pre-golangci-lint mkdir is the
 # first writer and hits ENOENT. mkdir -p the parent so the loop only ever blocks
-# on genuine contention (trixi-2cfa).
+# on genuine contention.
 mkdir -p "$(dirname "$lock_dir")" 2>/dev/null || true
 
 timeout_s="${LINT_LOCK_TIMEOUT:-300}"   # max wait for the lock before giving up
@@ -175,7 +174,7 @@ mtime_of() {
   # fallback: on GNU/Linux `stat -f` is a *valid* flag (--file-system), so
   # `stat -f %m "$1"` SUCCEEDS with garbage (its output starts with `File: …`)
   # and the fallback never fires — that `File:` then lands in the line-66
-  # arithmetic and bursts as `File: unbound variable` under set -u (trixi-g2z6).
+  # arithmetic and bursts as `File: unbound variable` under set -u.
   case "$(uname -s)" in
     Darwin) stat -f %m "$1" 2>/dev/null || echo 0 ;;
     *)      stat -c %Y "$1" 2>/dev/null || echo 0 ;;

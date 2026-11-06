@@ -1,0 +1,6 @@
+{
+  "profile": "tool",
+  "exceptions": [
+    {"rule": "incubator-extras", "reason": "this repo is the incubator; carries experimental scaffolding (extra scripts, exploratory configs) other fleet repos don't declare"}
+  ]
+}

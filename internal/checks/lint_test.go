@@ -9,16 +9,16 @@ import (
 	"github.com/dkoosis/conform-to-sdlc/internal/checks"
 )
 
-// TestLintFloor_FleetFixtures validates the parser against the seven shipped
-// ccp-sbp.2 baseline-floor configs (trixi#1500 trixi-bot#60
-// loto#230 canapay#153 ferret#116 fo#294 strand#107): every fleet
+// TestLintFloor_FleetFixtures validates the parser against the five shipped
+// ccp-sbp.2 baseline-floor configs (loto#230 canapay#153 ferret#116 fo#294
+// strand#107): every fleet
 // .golangci.yml as merged must pass the floor with zero findings.
 func TestLintFloor_FleetFixtures(t *testing.T) {
 	t.Parallel()
 
 	fixtures, err := filepath.Glob("testdata/fixtures/*.golangci.yml")
-	if err != nil || len(fixtures) != 7 {
-		t.Fatalf("want the 7 fleet fixtures, got %d (err %v)", len(fixtures), err)
+	if err != nil || len(fixtures) != 5 {
+		t.Fatalf("want the 5 fleet fixtures, got %d (err %v)", len(fixtures), err)
 	}
 
 	for _, fixture := range fixtures {
