@@ -250,6 +250,7 @@ func renderMakefile(spec ScaffoldSpec) string {
 	b.WriteString(".DEFAULT_GOAL := check\n\n")
 	b.WriteString("SHELL := /bin/bash\n")
 	b.WriteString(".SHELLFLAGS := -euo pipefail -c\n\n")
+	b.WriteString("FUZZTIME ?= 10s\n\n")
 
 	phony := append(requiredVerbs(spec.Profile), floorTargets(spec.Profile)...)
 	fmt.Fprintf(&b, ".PHONY: %s\n\n", strings.Join(phony, " "))

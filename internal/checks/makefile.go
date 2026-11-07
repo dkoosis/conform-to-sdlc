@@ -32,9 +32,11 @@ var (
 	// doc and recipe are what the scaffold emits for the gate.
 	auditGates = []auditGate{
 		{name: "race", alt: "test-race", doc: "Run tests with the race detector (fresh run)", recipe: "go test -race -count=1 -cover ./..."},
-		{name: "fuzz", doc: "Fuzz every Fuzz test (FUZZTIME=10s each)", recipe: `for pkg in $$(go list ./...); do for f in $$(go test -list '^Fuzz' $$pkg | sed -n '/^Fuzz/p'); do go test -run '^$$' -fuzz "^$$f$$" -fuzztime=10s $$pkg || exit 1; done; done`},
-		{name: "dupe", alt: "dupl", doc: "Check for code duplication (jscpd)", recipe: "npx --yes jscpd ."},
-		{name: "nilcheck", alt: "nilaway", doc: "Run nilaway", recipe: "go run go.uber.org/nilaway/cmd/nilaway@latest ./..."},
+		{name: "fuzz", doc: "Fuzz every Fuzz test (FUZZTIME=10s each)", recipe: `for pkg in $$(go list ./...); do for f in $$(go test -list '^Fuzz' $$pkg | sed -n '/^Fuzz/p'); do go test -run '^$$' -fuzz "^$$f$$" -fuzztime=$(FUZZTIME) $$pkg || exit 1; done; done`},
+		// jscpd exits 0 at any duplication unless given a threshold; 3% is the fleet's .jscpd.json value.
+		{name: "dupe", alt: "dupl", doc: "Fail above 3% code duplication (jscpd)", recipe: `npx --yes jscpd --threshold 3 --ignore '**/.git/**,**/.beads/**,**/.sandbox/**' .`},
+		// -include-pkgs keeps nilaway's reports to code the repo can fix, not its dependencies.
+		{name: "nilcheck", alt: "nilaway", doc: "Run nilaway on this module's packages", recipe: "go run go.uber.org/nilaway/cmd/nilaway@latest -include-pkgs=$$(go list -m) ./..."},
 		{name: "deadcode", doc: "Fail on any function unreachable from main", recipe: `go list -f '{{.Name}}' ./... | grep -qx main || { echo "deadcode: no main package, nothing to trace"; exit 0; }; out=$$(go run golang.org/x/tools/cmd/deadcode@latest ./...) || { echo "deadcode: could not run"; exit 1; }; if [ -n "$$out" ]; then echo "$$out"; exit 1; fi`},
 		{name: "vuln", doc: "Scan for known vulnerabilities", recipe: "govulncheck ./..."},
 	}
@@ -117,7 +119,7 @@ func checkMakefile(dir string, profile values.Profile) []Finding {
 			File:   makefileFile,
 			Rule:   RuleMakefileVerb,
 			Msg:    "no top-level Makefile — the four-verb contract (check · audit · deploy · help) has no home",
-			Repair: "copy the reference Makefile from ferret and adapt targets",
+			Repair: "copy sdlc's Makefile (the reference) and adapt targets; a new repo gets one from `conform-to-sdlc init`",
 		}}
 	}
 
