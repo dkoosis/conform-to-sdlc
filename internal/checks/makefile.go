@@ -26,6 +26,19 @@ var (
 	// contract verbs check · audit · help · deploy are enforced separately.
 	targetFloor = []string{"build", "test", "lint", "vet", "vuln", "selfcheck", "race", "clean"}
 
+	// auditGates is what `audit` must reach, through its prerequisites at any
+	// depth (cfm-tvk, nug 284ca53cd396): the most rigorous static analysis
+	// available, in every Go repo. alt names a target that serves as well.
+	// doc and recipe are what the scaffold emits for the gate.
+	auditGates = []auditGate{
+		{name: "race", alt: "test-race", doc: "Run tests with the race detector (fresh run)", recipe: "go test -race -count=1 -cover ./..."},
+		{name: "fuzz", doc: "Fuzz every Fuzz test (FUZZTIME=10s each)", recipe: `for pkg in $$(go list ./...); do for f in $$(go test -list '^Fuzz' $$pkg | sed -n '/^Fuzz/p'); do go test -run '^$$' -fuzz "^$$f$$" -fuzztime=10s $$pkg || exit 1; done; done`},
+		{name: "dupe", alt: "dupl", doc: "Check for code duplication (jscpd)", recipe: "npx --yes jscpd ."},
+		{name: "nilcheck", alt: "nilaway", doc: "Run nilaway", recipe: "go run go.uber.org/nilaway/cmd/nilaway@latest ./..."},
+		{name: "deadcode", doc: "Fail on any function unreachable from main", recipe: `out=$$(go run golang.org/x/tools/cmd/deadcode@latest ./...); if [ -n "$$out" ]; then echo "$$out"; exit 1; fi`},
+		{name: "vuln", doc: "Scan for known vulnerabilities", recipe: "govulncheck ./..."},
+	}
+
 	// toolTargets extend the floor for the tool profile only: a lib has no
 	// binary to install or cross-compile, the same reason it carries no deploy.
 	toolTargets = []string{"install", "cross"}
@@ -46,6 +59,8 @@ var (
 // (and the pin and scaffold rules) names — one constant so a rename can't
 // leave a stray literal behind.
 const makefileFile = "Makefile"
+
+type auditGate struct{ name, alt, doc, recipe string }
 
 type mkTarget struct {
 	name    string
@@ -202,8 +217,37 @@ func verbFindings(byName map[string]mkTarget, profile values.Profile) []Finding 
 				"make check audit's first prerequisite",
 			)
 		}
+		if missing := unreachedGates(byName); len(missing) > 0 {
+			add(
+				"audit does not reach "+strings.Join(missing, ", ")+" — every Go repo's audit runs race, fuzz, dupe, nilcheck, deadcode and vuln",
+				"add a documented target for each and list it in audit's prerequisites (sdlc's Makefile is the reference)",
+			)
+		}
 	}
 	return findings
+}
+
+// unreachedGates returns the audit gates that no prerequisite chain from
+// audit reaches, in auditGates order.
+func unreachedGates(byName map[string]mkTarget) []string {
+	reached := map[string]bool{}
+	queue := []string{"audit"}
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		if reached[name] {
+			continue
+		}
+		reached[name] = true
+		queue = append(queue, byName[name].prereqs...)
+	}
+	var missing []string
+	for _, g := range auditGates {
+		if !reached[g.name] && !reached[g.alt] {
+			missing = append(missing, g.name)
+		}
+	}
+	return missing
 }
 
 // docFindings enforces ## coverage (makefile-docs): every top-level target

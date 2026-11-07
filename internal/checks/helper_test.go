@@ -13,7 +13,7 @@ const goodMakefile = `.DEFAULT_GOAL := check
 GOLANGCILINT := bash scripts/lint-locked
 
 check: vet lint test build selfcheck ## Fast validation: vet + lint + test + build, then conform-to-sdlc
-audit: check race ## Exhaustive validation
+audit: check race fuzz dupe nilcheck deadcode vuln ## Exhaustive validation
 deploy: build ## Install locally
 help: ## Show this help
 vet: ## Run go vet
@@ -22,6 +22,10 @@ test: ## Run tests
 build: ## Compile
 race: ## Race detector
 vuln: ## Vulnerability scan
+fuzz: ## Fuzz
+dupe: ## Duplication
+nilcheck: ## nilaway
+deadcode: ## Unreachable functions
 selfcheck: ## Run conform-to-sdlc
 clean: ## Remove build outputs
 install: ## Install into GOBIN

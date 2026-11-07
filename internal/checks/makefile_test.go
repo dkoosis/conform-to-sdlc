@@ -47,6 +47,41 @@ func TestMakefile_Violations(t *testing.T) {
 			wantMsg:  "audit does not run check",
 		},
 		{
+			name:     "audit skips fuzz",
+			makefile: strings.Replace(goodMakefile, " fuzz dupe", " dupe", 1),
+			profile:  values.ProfileTool,
+			wantRule: checks.RuleMakefileVerb,
+			wantMsg:  "audit does not reach fuzz",
+		},
+		{
+			name:     "audit skips nilcheck",
+			makefile: strings.Replace(goodMakefile, " nilcheck", "", 1),
+			profile:  values.ProfileTool,
+			wantRule: checks.RuleMakefileVerb,
+			wantMsg:  "audit does not reach nilcheck",
+		},
+		{
+			name:     "audit skips dupe",
+			makefile: strings.Replace(goodMakefile, " dupe", "", 1),
+			profile:  values.ProfileTool,
+			wantRule: checks.RuleMakefileVerb,
+			wantMsg:  "audit does not reach dupe",
+		},
+		{
+			name:     "audit skips deadcode",
+			makefile: strings.Replace(goodMakefile, " deadcode", "", 1),
+			profile:  values.ProfileTool,
+			wantRule: checks.RuleMakefileVerb,
+			wantMsg:  "audit does not reach deadcode",
+		},
+		{
+			name:     "audit skips vuln",
+			makefile: strings.Replace(goodMakefile, " vuln ##", " ##", 1),
+			profile:  values.ProfileTool,
+			wantRule: checks.RuleMakefileVerb,
+			wantMsg:  "audit does not reach vuln",
+		},
+		{
 			name:     "undocumented target",
 			makefile: goodMakefile + "fuzz:\n\tgo test -fuzz .\n",
 			profile:  values.ProfileTool,
@@ -128,5 +163,18 @@ func TestMakefile_Conforming(t *testing.T) {
 	dir = writeRepo(t, map[string]string{"Makefile": viaInclude})
 	if findings := checks.CheckMakefile(dir, values.ProfileTool); len(findings) != 0 {
 		t.Errorf("cross via the sandbox include produced findings: %v", findings)
+	}
+}
+
+// A gate reached through another target, or under its alternate name, counts.
+func TestMakefile_AuditReachesGatesIndirectly(t *testing.T) {
+	t.Parallel()
+
+	mk := strings.Replace(goodMakefile, "audit: check race fuzz dupe nilcheck deadcode vuln", "audit: check slow", 1)
+	mk = strings.Replace(mk, "nilcheck: ##", "nilaway: ##", 1)
+	mk += "slow: race fuzz dupe nilaway deadcode vuln ## The slow gates\n"
+	dir := writeRepo(t, map[string]string{"Makefile": mk})
+	if findings := checks.CheckMakefile(dir, values.ProfileTool); len(findings) != 0 {
+		t.Errorf("indirect gates produced findings: %v", findings)
 	}
 }
