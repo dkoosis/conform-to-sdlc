@@ -105,15 +105,18 @@ deadcode: ## Fail on any function unreachable from main (deadcode)
 ## doctor target provided by .sandbox/lib/Makefile.doctor.mk (project.conf-driven)
 ## cross / cross-amd64 / cross-arm64 provided by .sandbox/lib/Makefile.cross.mk
 
-install: ## Install conform-to-sdlc to GOPATH/bin (version-stamped)
+install: ## Install conform-to-sdlc to GOBIN, else GOPATH/bin (version-stamped)
 	go install -ldflags "$(LDFLAGS)" ./cmd/conform-to-sdlc
 
-deploy: build install ## Build, then install conform-to-sdlc to GOPATH/bin
-	@echo "=== deployed (conform-to-sdlc installed to $$(go env GOPATH)/bin) ==="
-	@gobin="$$(go env GOPATH)/bin/conform-to-sdlc"; \
+# go install writes to GOBIN when set, else the first GOPATH entry's bin.
+deploy: build install ## Build, then install conform-to-sdlc to GOBIN or GOPATH/bin
+	@bindir="$$(go env GOBIN)"; \
+	[ -n "$$bindir" ] || bindir="$$(go env GOPATH | cut -d: -f1)/bin"; \
+	fresh="$$bindir/conform-to-sdlc"; \
+	echo "=== deployed (conform-to-sdlc installed to $$bindir) ==="; \
 	active="$$(command -v conform-to-sdlc 2>/dev/null || true)"; \
-	if [ -n "$$active" ] && [ "$$active" != "$$gobin" ]; then \
-		echo "warning: PATH runs $$active, not the fresh $$gobin; the stale copy shadows this deploy"; \
+	if [ -n "$$active" ] && [ "$$active" != "$$fresh" ]; then \
+		echo "warning: PATH runs $$active, not the fresh $$fresh; the stale copy shadows this deploy"; \
 	fi
 
 clean: ## Remove built binary + sandbox build artifacts
