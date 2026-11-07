@@ -87,7 +87,7 @@ jobs:
 `
 
 const goodProjectConf = `PROJECT_NAME=x
-GOLANGCI_LINT_VERSION=v2.12.2
+GOLANGCI_LINT_VERSION=v2.14.0
 `
 
 const goodValues = `{"profile": "tool", "exceptions": []}` + "\n"
