@@ -218,7 +218,7 @@ func crossBuild(t *testing.T, binPath string) (string, error) {
 	write("cmd/app/main.go", "package main\n\nvar version = \"dev\"\n\nfunc main() { println(version) }\n")
 	// A failing upx keeps the binary unpacked, so its build info stays readable.
 	write("fakebin/upx", "#!/bin/sh\nexit 1\n")
-	if err := os.Chmod(filepath.Join(dir, "fakebin/upx"), 0o755); err != nil {
+	if err := os.Chmod(filepath.Join(dir, "fakebin", "upx"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", filepath.Join(dir, "fakebin")+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -242,7 +242,7 @@ func TestCrossBuildStampsLowercaseVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make: %v", err)
 	}
-	bin, err := os.ReadFile(filepath.Join(dir, ".sandbox/bin/linux-amd64/app"))
+	bin, err := os.ReadFile(filepath.Join(dir, ".sandbox", "bin", "linux-amd64", "app"))
 	if err != nil {
 		t.Fatal(err)
 	}
