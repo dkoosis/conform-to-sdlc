@@ -110,6 +110,11 @@ install: ## Install conform-to-sdlc to GOPATH/bin (version-stamped)
 
 deploy: build install ## Build, then install conform-to-sdlc to GOPATH/bin
 	@echo "=== deployed (conform-to-sdlc installed to $$(go env GOPATH)/bin) ==="
+	@gobin="$$(go env GOPATH)/bin/conform-to-sdlc"; \
+	active="$$(command -v conform-to-sdlc 2>/dev/null || true)"; \
+	if [ -n "$$active" ] && [ "$$active" != "$$gobin" ]; then \
+		echo "warning: PATH runs $$active, not the fresh $$gobin; the stale copy shadows this deploy"; \
+	fi
 
 clean: ## Remove built binary + sandbox build artifacts
 	@rm -f conform-to-sdlc

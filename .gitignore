@@ -21,6 +21,7 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+.beads.gate.lock
 
 # snipe local index
 .snipe/
