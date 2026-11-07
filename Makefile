@@ -115,7 +115,7 @@ deploy: build install ## Build, then install conform-to-sdlc to GOBIN or GOPATH/
 	fresh="$$bindir/conform-to-sdlc"; \
 	echo "=== deployed (conform-to-sdlc installed to $$bindir) ==="; \
 	active="$$(command -v conform-to-sdlc 2>/dev/null || true)"; \
-	if [ -n "$$active" ] && [ "$$active" != "$$fresh" ]; then \
+	if [ -n "$$active" ] && ! [ "$$active" -ef "$$fresh" ]; then \
 		echo "warning: PATH runs $$active, not the fresh $$fresh; the stale copy shadows this deploy"; \
 	fi
 
