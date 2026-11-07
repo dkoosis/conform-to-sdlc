@@ -2,6 +2,8 @@
 # Include from consuming project: include .sandbox/lib/Makefile.cross.mk
 # Requires: .sandbox/project.conf exists
 #
+# The build stamps $(VERSION) into main.Version and main.version (the linker ignores
+# a name the repo's main does not declare), so either spelling works.
 # Reads PROJECT_BINS and PREBUILT_TOOLS from project.conf.
 # Version pins below are defaults — override in your Makefile before the include.
 # Recipes run under make's default /bin/sh (dash on Linux): POSIX sh only, no pipefail.
@@ -60,6 +62,7 @@ _cross-build:
 	@mkdir -p $(SANDBOX_BIN_DIR)/linux-$(CROSS_ARCH)
 	@# All tool installs go here; use shell var instead of $(eval) to avoid parse-time trap
 	@. .sandbox/project.conf; \
+	set -e; \
 	xtool_build() { \
 		tmpmod=$$(mktemp -d) && \
 		( cd "$$tmpmod" && go mod init xtool >/dev/null 2>&1 && \
@@ -74,7 +77,7 @@ _cross-build:
 		name=$${entry%%:*}; path=$${entry#*:}; \
 		echo "-- $$name"; \
 		CGO_ENABLED=0 GOOS=linux GOARCH=$(CROSS_ARCH) go build -trimpath \
-			-ldflags='-s -w -X main.Version=$(VERSION)' \
+			-ldflags='-s -w -X main.Version=$(VERSION) -X main.version=$(VERSION)' \
 			-o $(SANDBOX_BIN_DIR)/linux-$(CROSS_ARCH)/$$name $$path; \
 	done; \
 	for tool in $$PREBUILT_TOOLS; do \

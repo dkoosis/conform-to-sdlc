@@ -2,6 +2,7 @@ package sandbox_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -188,5 +189,64 @@ func TestSyncOverwritesDriftAndSparesForeignFiles(t *testing.T) {
 	}
 	if body, err := os.ReadFile(foreign); err != nil || string(body) != "# mine\n" {
 		t.Errorf("Sync clobbered a file conform-to-sdlc does not own: %q, %v", body, err)
+	}
+}
+
+// crossBuild runs the library's _cross-build in a scratch module whose
+// project.conf lists one binary at binPath, and returns make's error and the
+// scratch dir.
+func crossBuild(t *testing.T, binPath string) (string, error) {
+	t.Helper()
+	files, err := sandbox.Files()
+	if err != nil {
+		t.Fatalf("Files: %v", err)
+	}
+	dir := t.TempDir()
+	write := func(name, body string) {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(".sandbox/lib/Makefile.cross.mk", string(files["Makefile.cross.mk"]))
+	write(".sandbox/project.conf", "PROJECT_BINS=\"app:"+binPath+"\"\nPREBUILT_TOOLS=\"\"\n")
+	write("go.mod", "module app\n\ngo 1.21\n")
+	write("cmd/app/main.go", "package main\n\nvar version = \"dev\"\n\nfunc main() { println(version) }\n")
+	// A failing upx keeps the binary unpacked, so its build info stays readable.
+	write("fakebin/upx", "#!/bin/sh\nexit 1\n")
+	if err := os.Chmod(filepath.Join(dir, "fakebin/upx"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", filepath.Join(dir, "fakebin")+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cmd := exec.Command("make", "-f", ".sandbox/lib/Makefile.cross.mk", "_cross-build", "CROSS_ARCH=amd64", "VERSION=v9.9.9")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	t.Logf("%s", out)
+	return dir, err
+}
+
+// cfm-7e9: a failed build in the loop must fail make.
+func TestCrossBuildFailsWhenABuildFails(t *testing.T) {
+	if _, err := crossBuild(t, "./cmd/missing"); err == nil {
+		t.Error("make exited 0 although the build failed")
+	}
+}
+
+// cfm-7e9: the stamp reaches a main that declares main.version (fo does).
+func TestCrossBuildStampsLowercaseVersion(t *testing.T) {
+	dir, err := crossBuild(t, "./cmd/app")
+	if err != nil {
+		t.Fatalf("make: %v", err)
+	}
+	bin, err := os.ReadFile(filepath.Join(dir, ".sandbox/bin/linux-amd64/app"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(bin), "v9.9.9") {
+		t.Error("binary lacks the version stamp for main.version")
 	}
 }
