@@ -35,7 +35,7 @@ var (
 		{name: "fuzz", doc: "Fuzz every Fuzz test (FUZZTIME=10s each)", recipe: `for pkg in $$(go list ./...); do for f in $$(go test -list '^Fuzz' $$pkg | sed -n '/^Fuzz/p'); do go test -run '^$$' -fuzz "^$$f$$" -fuzztime=10s $$pkg || exit 1; done; done`},
 		{name: "dupe", alt: "dupl", doc: "Check for code duplication (jscpd)", recipe: "npx --yes jscpd ."},
 		{name: "nilcheck", alt: "nilaway", doc: "Run nilaway", recipe: "go run go.uber.org/nilaway/cmd/nilaway@latest ./..."},
-		{name: "deadcode", doc: "Fail on any function unreachable from main", recipe: `out=$$(go run golang.org/x/tools/cmd/deadcode@latest -test ./...) || { echo "deadcode: could not run"; exit 1; }; if [ -n "$$out" ]; then echo "$$out"; exit 1; fi`},
+		{name: "deadcode", doc: "Fail on any function unreachable from main", recipe: `go list -f '{{.Name}}' ./... | grep -qx main || { echo "deadcode: no main package, nothing to trace"; exit 0; }; out=$$(go run golang.org/x/tools/cmd/deadcode@latest ./...) || { echo "deadcode: could not run"; exit 1; }; if [ -n "$$out" ]; then echo "$$out"; exit 1; fi`},
 		{name: "vuln", doc: "Scan for known vulnerabilities", recipe: "govulncheck ./..."},
 	}
 
