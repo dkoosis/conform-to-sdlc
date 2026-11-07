@@ -1,6 +1,6 @@
 # conform-to-sdlc Makefile — strict QA gates, fleet pattern (reference: ~/Projects/ferret).
 #
-# Primary: check (vet+lint+test+build) | audit (check+race+vuln+dupe+nilcheck)
+# Primary: check (vet+lint+test+build) | audit (check+race+fuzz+dupe+nilcheck+deadcode+vuln)
 
 .DEFAULT_GOAL := check
 
@@ -12,7 +12,7 @@ SHELL := /bin/bash
 include .sandbox/lib/Makefile.doctor.mk
 include .sandbox/lib/Makefile.cross.mk
 
-.PHONY: help check audit vet lint test race build vuln dupe nilcheck install deploy clean pack-drift
+.PHONY: help check audit vet lint test race fuzz build vuln dupe nilcheck deadcode install deploy clean pack-drift
 
 # Serialize golangci-lint through the machine-global mkdir mutex (see script
 # header — golangci-lint's cache lock fails exit-3 on contention instead of
@@ -38,7 +38,7 @@ help: ## Show this help
 check: vet lint pack-drift test build selfcheck ## Fast validation: vet + lint + test + build + conform-to-sdlc on itself
 	@echo "=== check pass ==="
 
-audit: check race vuln dupe nilcheck ## Exhaustive validation
+audit: check race fuzz dupe nilcheck deadcode vuln ## Exhaustive validation
 	@echo "=== audit pass ==="
 
 vet: ## Run go vet
@@ -83,6 +83,24 @@ nilcheck: ## Run nilaway (skips if not installed)
 		exit 0; \
 	fi
 	nilaway -include-pkgs=github.com/dkoosis/conform-to-sdlc ./...
+
+# Runs each Fuzz function it finds, FUZZTIME apiece.
+FUZZTIME ?= 10s
+fuzz: ## Fuzz every Fuzz test (FUZZTIME=10s each)
+	@set -e; \
+	for pkg in $$(go list ./...); do \
+		for f in $$(go test -list '^Fuzz' $$pkg | sed -n '/^Fuzz/p'); do \
+			echo "fuzz $$pkg $$f"; \
+			go test -run '^$$' -fuzz "^$$f$$" -fuzztime=$(FUZZTIME) $$pkg; \
+		done; \
+	done
+
+# deadcode lists each function no path from main reaches, and exits 0 either way,
+# so the target fails on any output.
+DEADCODE_VER ?= v0.52.0
+deadcode: ## Fail on any function unreachable from main (deadcode)
+	@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/conform-to-sdlc) || { echo "deadcode: could not run"; exit 1; }; \
+	if [ -n "$$out" ]; then echo "$$out"; echo "deadcode: the functions above are unreachable; cut them"; exit 1; fi
 
 ## doctor target provided by .sandbox/lib/Makefile.doctor.mk (project.conf-driven)
 ## cross / cross-amd64 / cross-arm64 provided by .sandbox/lib/Makefile.cross.mk

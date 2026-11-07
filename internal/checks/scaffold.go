@@ -264,7 +264,11 @@ func renderMakefile(spec ScaffoldSpec) string {
 		strings.Join(checkFloor, " "), strings.Join(checkFloor, " + "))
 	b.WriteString("\t@echo \"=== check pass ===\"\n\n")
 
-	b.WriteString("audit: check race vuln ## Exhaustive validation — the gate, plus race and vulnerabilities\n")
+	gates := make([]string, len(auditGates))
+	for i, g := range auditGates {
+		gates[i] = g.name
+	}
+	fmt.Fprintf(&b, "audit: check %s ## Exhaustive validation — the gate, plus %s\n", strings.Join(gates, " "), strings.Join(gates, " + "))
 	b.WriteString("\t@echo \"=== audit pass ===\"\n\n")
 
 	if slices.Contains(verbs, "deploy") {
@@ -288,11 +292,10 @@ func renderMakefile(spec ScaffoldSpec) string {
 		fmt.Fprintf(&b, "%s: ## %s\n\t%s\n\n", step, mkStepDoc(step), mkStepRecipe(step))
 	}
 
-	b.WriteString("race: ## Run tests with the race detector (fresh run)\n")
-	b.WriteString("\tgo test -race -count=1 -cover ./...\n\n")
-	b.WriteString("vuln: ## Scan for known vulnerabilities\n")
-	b.WriteString("\tgovulncheck ./...\n")
-	return b.String()
+	for _, g := range auditGates {
+		fmt.Fprintf(&b, "%s: ## %s\n\t%s\n\n", g.name, g.doc, g.recipe)
+	}
+	return strings.TrimRight(b.String(), "\n") + "\n"
 }
 
 // mkStepDoc and mkStepRecipe supply a body for each checkFloor entry. An
