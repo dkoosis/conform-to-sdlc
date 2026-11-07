@@ -219,3 +219,21 @@ func TestScaffoldSelfcheckRunsThisTool(t *testing.T) {
 		t.Errorf("selfcheck recipe = %q; want %q", lines[1], "\tconform-to-sdlc")
 	}
 }
+
+// TestScaffoldAuditGatesCheckSomething: each rigor gate the scaffold emits must
+// be able to fail on the repo's own code (PR #57 review, cfm-60e). jscpd exits 0
+// with no threshold, nilaway without -include-pkgs reports on dependencies, and
+// a FUZZTIME the recipe ignores misleads `make help`.
+func TestScaffoldAuditGatesCheckSomething(t *testing.T) {
+	mk := renderMakefile(testSpec())
+	for _, want := range []string{
+		"\nFUZZTIME ?= 10s\n",
+		"-fuzztime=$(FUZZTIME) ",
+		"jscpd --threshold 3 --ignore '**/.git/**,**/.beads/**,**/.sandbox/**' .",
+		"nilaway@latest -include-pkgs=$$(go list -m) ./...",
+	} {
+		if !strings.Contains(mk, want) {
+			t.Errorf("scaffolded Makefile lacks %q", want)
+		}
+	}
+}
