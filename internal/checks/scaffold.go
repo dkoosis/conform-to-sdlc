@@ -484,12 +484,13 @@ func bdConfigValue(key string, spec ScaffoldSpec) string {
 	}
 }
 
-// renderHook emits one shape-B hook: a tracked source file that delegates to
-// bd's machinery through the marker delegatesToBD looks for.
+// renderHook emits one tracked hook: a source file, run by the global hook
+// that forwards to it, that delegates to bd's machinery through the marker
+// delegatesToBD looks for.
 func renderHook(event string) func(ScaffoldSpec) string {
 	return func(ScaffoldSpec) string {
 		return fmt.Sprintf(`#!/usr/bin/env bash
-# %s — tracked hook (shape B). core.hooksPath points at %s; `+"`conform-to-sdlc --local`"+`
+# %s — tracked hook. The global hooks dir forwards to %s; `+"`conform-to-sdlc --local`"+`
 # checks that it does.
 set -euo pipefail
 

@@ -52,7 +52,7 @@ func parseInitFlags(args []string) (initFlags, error) {
 		fmt.Fprint(os.Stderr, `usage: conform-to-sdlc init <repo> [flags]
 
 Scaffolds a repo that passes `+"`conform-to-sdlc`"+` unedited, then wires the machine
-half (git hooksPath, bd init, bd config). GitHub state is NOT touched unless
+half (git init, bd init, bd config). GitHub state is NOT touched unless
 --with-remote is passed.
 
 flags:

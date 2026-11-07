@@ -8,29 +8,31 @@ import (
 	"strings"
 )
 
-// Fleet-canonical git-hook shape is B (decision c9ab7db0d7ac, ratified
-// 2026-08-10): core.hooksPath=.githooks, a TRACKED repo directory whose
-// hooks are source files delegating to bd's machinery. Shape A (.beads/hooks
-// as the hook path — tool-generated, usually gitignored, invisible to
-// review, empty on fresh clone) is retired. There is ONE predicate; no dual
-// shape is accepted.
+// Fleet git-hook shape is global forwarding (decision 51900b14be55, ratified
+// 2026-09-18, superseding c9ab7db0d7ac): fleet-wide gates live once, in the
+// global core.hooksPath (~/.config/git/hooks), and each global hook forwards
+// to <repo>/.githooks/<hook> when present. A repo's own hooks are TRACKED
+// source files in .githooks delegating to bd's machinery; .beads/hooks
+// (tool-generated, usually gitignored, invisible to review, empty on a fresh
+// clone) is not a hook home. No repo sets a local core.hooksPath.
 //
 // Surface 1 checks the repo-file half: .githooks exists with executable
-// pre-commit and pre-push (the gate carriers). Whether core.hooksPath
-// actually points at it is machine state — that half belongs to --local.
+// pre-commit and pre-push (the gate carriers). Whether the global hooks dir
+// is in effect and forwards to them is machine state — that half belongs to
+// --local.
 const hooksDir = ".githooks"
 
 var requiredHooks = []string{"pre-commit", "pre-push"}
 
-// checkHooksShape verifies the tracked shape-B hook directory (hooks-shape).
+// checkHooksShape verifies the tracked .githooks directory (hooks-shape).
 func checkHooksShape(dir string) []Finding {
 	info, err := os.Stat(filepath.Join(dir, hooksDir))
 	if err != nil || !info.IsDir() {
 		return []Finding{{
 			File:   hooksDir,
 			Rule:   RuleHooksShape,
-			Msg:    "no tracked .githooks directory — shape B is the one accepted hook shape; untracked hooks are invisible to review and empty on a fresh clone",
-			Repair: "track hook sources in .githooks/ and set core.hooksPath=.githooks (shape A, .beads/hooks as hook path, is retired)",
+			Msg:    "no tracked .githooks directory — the global hooks forward to .githooks, the one home for a repo's hooks; untracked hooks are invisible to review and empty on a fresh clone",
+			Repair: "track hook sources in .githooks/ (not .beads/hooks); set no local core.hooksPath",
 		}}
 	}
 

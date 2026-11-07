@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/dkoosis/conform-to-sdlc/internal/checks"
@@ -18,7 +20,7 @@ bd hooks run "$(basename "$0")" "$@"
 # --- END BEADS INTEGRATION v1.0.5 ---
 `
 
-var hookEvents = []string{"post-checkout", "post-merge", "pre-commit", "pre-push", "prepare-commit-msg"}
+var hookEvents = []string{"post-checkout", "post-merge", "pre-commit", "pre-push"}
 
 // wrapperHook is an alternate shape (cfm-wml): a tracked wrapper that
 // exec-chains to bd's shim instead of carrying the inline managed block.
@@ -32,7 +34,7 @@ fi
 exit 0
 `
 
-// localRepo returns a full shape-B hook set plus the Surface-1 files the
+// localRepo returns a full tracked .githooks set plus the Surface-1 files the
 // values loader needs.
 func localRepo() map[string]string {
 	files := map[string]string{
@@ -46,8 +48,8 @@ func localRepo() map[string]string {
 }
 
 // initGit makes dir a git repo, hermetic from global/system config, and sets
-// core.hooksPath when non-empty. Uses t.Setenv, so callers must not be
-// parallel.
+// a local core.hooksPath when non-empty. Uses t.Setenv, so callers must not
+// be parallel; call globalHooks after it.
 func initGit(t *testing.T, dir, hooksPath string) {
 	t.Helper()
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
@@ -64,6 +66,29 @@ func initGit(t *testing.T, dir, hooksPath string) {
 	if hooksPath != "" {
 		run("config", "core.hooksPath", hooksPath)
 	}
+}
+
+// globalHooks points git's global config at a fresh global hooks dir holding
+// an executable pre-push, which forwards to the repo's .githooks/pre-push when
+// forwards is true, and returns the dir. Uses t.Setenv — not parallel.
+func globalHooks(t *testing.T, forwards bool) string {
+	t.Helper()
+	hooks := t.TempDir()
+	body := "#!/bin/sh\nexit 0\n"
+	if forwards {
+		body = "#!/bin/sh\n. \"$(dirname \"$0\")/lib/forward-to-repo-hook.sh\"\nforward_to_repo_hook pre-push \"\" \"$@\"\n"
+	}
+	for _, e := range hookEvents {
+		if err := os.WriteFile(filepath.Join(hooks, e), []byte(strings.ReplaceAll(body, "pre-push", e)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(cfg, []byte("[core]\n\thooksPath = "+hooks+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	return hooks
 }
 
 // fakeBD prepends a stub bd to PATH answering `bd config list` with the
@@ -83,11 +108,13 @@ echo "  sync.remote = ` + remote + `"
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// TestRunLocal_ConformingMachine: live hooksPath + full delegating hook set
-// + live bd config matching the declaration = zero findings.
+// TestRunLocal_ConformingMachine: global hooks dir forwarding, no local
+// hooksPath, full delegating hook set, live bd config matching the
+// declaration = zero findings.
 func TestRunLocal_ConformingMachine(t *testing.T) {
 	dir := writeRepo(t, localRepo())
-	initGit(t, dir, ".githooks")
+	initGit(t, dir, "")
+	globalHooks(t, true)
 	fakeBD(t, "/vault/plans", "cfm", "git+https://github.com/x/y.git")
 
 	if findings := checks.RunLocal(context.Background(), dir); len(findings) != 0 {
@@ -95,8 +122,8 @@ func TestRunLocal_ConformingMachine(t *testing.T) {
 	}
 }
 
-// TestRunLocal_DeadWiring: a fresh clone with hooksPath unset trips
-// hooks-path and review-gate.
+// TestRunLocal_DeadWiring: a machine with core.hooksPath unset everywhere
+// trips hooks-path and review-gate.
 func TestRunLocal_DeadWiring(t *testing.T) {
 	dir := writeRepo(t, localRepo())
 	initGit(t, dir, "")
@@ -133,23 +160,93 @@ func TestRunLocal_NoGitOpsException(t *testing.T) {
 	}
 }
 
+// TestHooksPath_Violations: global forwarding (decision 51900b14be55) — the
+// global hooks dir passes; unset, or any hooksPath the repo sets itself,
+// is a finding.
 func TestHooksPath_Violations(t *testing.T) {
 	tests := []struct {
 		name      string
-		hooksPath string
+		localPath string
+		global    bool
 		wantMsg   string
 	}{
-		{name: "live shape B", hooksPath: ".githooks"},
-		{name: "unset", hooksPath: "", wantMsg: "core.hooksPath unset"},
-		{name: "shape A location", hooksPath: ".beads/hooks", wantMsg: "shape A is retired"},
+		{name: "global hooks dir", global: true},
+		{name: "unset", wantMsg: "core.hooksPath unset"},
+		{name: "local .githooks", localPath: ".githooks", global: true, wantMsg: "shadows the fleet's global gates"},
+		{name: "local .beads/hooks", localPath: ".beads/hooks", global: true, wantMsg: "shadows the fleet's global gates"},
+		{name: "local .githooks, no global", localPath: ".githooks", wantMsg: "shadows the fleet's global gates"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := writeRepo(t, nil)
-			initGit(t, dir, tt.hooksPath)
+			initGit(t, dir, tt.localPath)
+			if tt.global {
+				globalHooks(t, true)
+			}
 			findings := checks.CheckHooksPathFn(context.Background(), dir)
 			assertOneOrClean(t, findings, checks.RuleHooksPath, tt.wantMsg)
+		})
+	}
+}
+
+// A local hooksPath naming the global dir itself is still a repo setting
+// one: the decision bars any local core.hooksPath.
+func TestHooksPath_LocalCopyOfGlobalDir(t *testing.T) {
+	dir := writeRepo(t, nil)
+	initGit(t, dir, "")
+	hooks := globalHooks(t, true)
+	cmd := exec.Command("git", "config", "core.hooksPath", hooks)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git config: %v\n%s", err, out)
+	}
+	assertOneOrClean(t, checks.CheckHooksPathFn(context.Background(), dir), checks.RuleHooksPath, "local config")
+}
+
+// A global dir that lacks a forwarder for a tracked hook silently disables
+// that hook, though the repo's copy is fine.
+func TestHooksPath_MissingForwarder(t *testing.T) {
+	dir := writeRepo(t, localRepo())
+	initGit(t, dir, "")
+	hooks := globalHooks(t, true)
+	if err := os.Remove(filepath.Join(hooks, "post-merge")); err != nil {
+		t.Fatal(err)
+	}
+	assertOneOrClean(t, checks.CheckHooksPathFn(context.Background(), dir), checks.RuleHooksPath, "global post-merge")
+}
+
+// bd's prepare-commit-msg runs from the global hook, so conform requires no
+// tracked copy (cfm-cdy).
+func TestBDHooks_NoPrepareCommitMsg(t *testing.T) {
+	t.Parallel()
+	files := localRepo()
+	files[".githooks/prepare-commit-msg"] = "#!/bin/sh\nexit 0\n"
+	dir := writeRepo(t, files)
+	assertOneOrClean(t, checks.CheckBDHooks(dir), checks.RuleBDHooks, "")
+	if slices.Contains(checks.TrackedHookEvents(), "prepare-commit-msg") {
+		t.Fatal("prepare-commit-msg is tracked")
+	}
+}
+
+func TestDelegatesToBD(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		hook string
+		want bool
+	}{
+		{"managed block", delegatingHook, true},
+		{"wrapper shape", wrapperHook, true},
+		{"bd hooks run call", "#!/bin/sh\nset -e\nbd hooks run pre-push \"$@\"\n", true},
+		{"no delegation", "#!/bin/sh\nexit 0\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := checks.DelegatesToBD([]byte(tt.hook)); got != tt.want {
+				t.Errorf("DelegatesToBD = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
@@ -193,13 +290,39 @@ func TestBDHooks_Violations(t *testing.T) {
 func TestReviewGate_BrokenLinks(t *testing.T) {
 	t.Run("clean chain", func(t *testing.T) {
 		dir := writeRepo(t, localRepo())
-		initGit(t, dir, ".githooks")
+		initGit(t, dir, "")
+		globalHooks(t, true)
 		assertOneOrClean(t, checks.CheckReviewGate(context.Background(), dir), checks.RuleReviewGate, "")
+	})
+
+	t.Run("local hooksPath shadows the global pre-push", func(t *testing.T) {
+		dir := writeRepo(t, localRepo())
+		initGit(t, dir, ".githooks")
+		globalHooks(t, true)
+		assertOneOrClean(t, checks.CheckReviewGate(context.Background(), dir), checks.RuleReviewGate, "unreachable")
+	})
+
+	t.Run("global pre-push does not forward", func(t *testing.T) {
+		dir := writeRepo(t, localRepo())
+		initGit(t, dir, "")
+		globalHooks(t, false)
+		assertOneOrClean(t, checks.CheckReviewGate(context.Background(), dir), checks.RuleReviewGate, "does not forward")
+	})
+
+	t.Run("global pre-push missing", func(t *testing.T) {
+		dir := writeRepo(t, localRepo())
+		initGit(t, dir, "")
+		hooks := globalHooks(t, true)
+		if err := os.Remove(filepath.Join(hooks, "pre-push")); err != nil {
+			t.Fatal(err)
+		}
+		assertOneOrClean(t, checks.CheckReviewGate(context.Background(), dir), checks.RuleReviewGate, "does not forward")
 	})
 
 	t.Run("pre-push not executable", func(t *testing.T) {
 		dir := writeRepo(t, localRepo())
-		initGit(t, dir, ".githooks")
+		initGit(t, dir, "")
+		globalHooks(t, true)
 		if err := os.Chmod(filepath.Join(dir, ".githooks", "pre-push"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -210,7 +333,8 @@ func TestReviewGate_BrokenLinks(t *testing.T) {
 		files := localRepo()
 		files[".githooks/pre-push"] = "#!/bin/sh\nexit 0\n"
 		dir := writeRepo(t, files)
-		initGit(t, dir, ".githooks")
+		initGit(t, dir, "")
+		globalHooks(t, true)
 		assertOneOrClean(t, checks.CheckReviewGate(context.Background(), dir), checks.RuleReviewGate, "does not delegate")
 	})
 }

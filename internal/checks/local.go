@@ -17,13 +17,16 @@ import (
 // surface checks the live half: run it from `make doctor` and at session
 // start, on the developer's machine.
 const (
-	// RuleHooksPath — core.hooksPath resolves to .githooks (shape B live).
+	// RuleHooksPath — git reads hooks from the one global hooks dir, and this
+	// repo sets no local core.hooksPath (global forwarding, decision
+	// 51900b14be55).
 	RuleHooksPath = "hooks-path"
 	// RuleBDHooks — every tracked hook is executable and delegates to bd's
 	// machinery (the managed BEADS INTEGRATION block).
 	RuleBDHooks = "bd-hooks"
-	// RuleReviewGate — the pre-push chain is alive end to end: hooksPath set,
-	// pre-push executable, delegation present. (Which gate implementation it
+	// RuleReviewGate — the pre-push chain is alive end to end: the global
+	// pre-push forwards to the tracked .githooks/pre-push, which is
+	// executable and delegates. (Which gate implementation it
 	// chains is cfm-1e1.6's consolidation, not checked here.)
 	RuleReviewGate = "review-gate"
 	// RuleDoltRemote — bd's LIVE sync.remote is configured, so bead history
@@ -43,8 +46,10 @@ const (
 // noGitOpsFamily is what a no-git-ops exception expands to.
 var noGitOpsFamily = []string{RuleHooksShape, RuleHookExitDiscard, RuleHooksPath, RuleBDHooks, RuleReviewGate}
 
-// trackedHookEvents are the bd hook events shape B tracks in .githooks.
-var trackedHookEvents = []string{"post-checkout", "post-merge", "pre-commit", "pre-push", "prepare-commit-msg"}
+// trackedHookEvents are the bd hook events a repo tracks in .githooks. The
+// global prepare-commit-msg runs bd hooks run itself and never forwards, so a
+// tracked copy would never run (cfm-cdy).
+var trackedHookEvents = []string{"post-checkout", "post-merge", "pre-commit", "pre-push"}
 
 // Two delegation shapes are accepted (cfm-wml): the inline beads-managed block,
 // or a delegating wrapper that exec-chains to bd's shim in .beads/hooks/.
@@ -52,13 +57,15 @@ var trackedHookEvents = []string{"post-checkout", "post-merge", "pre-commit", "p
 const (
 	delegationMarker = "BEADS INTEGRATION"
 	delegationShim   = ".beads/hooks"
+	delegationRun    = "bd hooks run"
 )
 
 // delegatesToBD reports whether hook content hands the event to bd by either
 // accepted shape.
 func delegatesToBD(data []byte) bool {
 	return bytes.Contains(data, []byte(delegationMarker)) ||
-		bytes.Contains(data, []byte(delegationShim))
+		bytes.Contains(data, []byte(delegationShim)) ||
+		bytes.Contains(data, []byte(delegationRun))
 }
 
 const (
@@ -87,39 +94,100 @@ func RunLocal(ctx context.Context, dir string) []Finding {
 	return findings
 }
 
-// hooksPathValue resolves core.hooksPath as git sees it (all config scopes).
-func hooksPathValue(ctx context.Context, dir string) (string, error) {
+// globalHooksRepair is the repair when the global hooks dir is not in effect:
+// the fleet's hooks live once, there, and each forwards to the repo's
+// .githooks.
+const globalHooksRepair = "install the fleet's global hooks (install-hooks), which sets git config --global core.hooksPath ~/.config/git/hooks"
+
+// forwardMarker is the call each global hook makes, once its own check has
+// passed, to run <repo>/.githooks/<hook> (lib/forward-to-repo-hook.sh in the
+// global hooks dir). A global hook without it never reaches the repo's hook.
+const forwardMarker = "forward_to_repo_hook"
+
+// hooksPathSetting resolves core.hooksPath as git sees it (all config scopes,
+// ~ expanded) and the scope that set it. Unset is ("", "", err).
+func hooksPathSetting(ctx context.Context, dir string) (scope, val string, err error) {
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "config", "--get", "core.hooksPath")
+	cmd := exec.CommandContext(ctx, "git", "config", "--show-scope", "--type=path", "--get", "core.hooksPath")
 	cmd.Dir = dir
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
-	err := cmd.Run()
-	return strings.TrimSpace(stdout.String()), err
+	err = cmd.Run()
+	scope, val, _ = strings.Cut(strings.TrimSpace(stdout.String()), "\t")
+	return scope, val, err
 }
 
-// checkHooksPath verifies the live half of shape B: git actually reads hooks
-// from the tracked .githooks (hooks-path).
-func checkHooksPath(ctx context.Context, dir string) []Finding {
-	val, err := hooksPathValue(ctx, dir)
+// localScope reports whether a config scope belongs to this repo rather than
+// the machine.
+func localScope(scope string) bool {
+	return scope == "local" || scope == "worktree"
+}
+
+// hooksPathFinding returns the finding when the global hooks dir is not what
+// git reads in dir: core.hooksPath set by the repo, or set nowhere. Otherwise
+// it returns nil and the global dir git reads.
+func hooksPathFinding(ctx context.Context, dir, file, rule string) (*Finding, string) {
+	scope, val, err := hooksPathSetting(ctx, dir)
 	switch {
 	case err != nil || val == "":
-		return []Finding{{
-			File:   ".git/config",
-			Rule:   RuleHooksPath,
-			Msg:    "core.hooksPath unset — git reads .git/hooks (empty on every clone); every tracked gate is dead",
-			Repair: "git config core.hooksPath .githooks",
-		}}
-	case val != hooksDir:
-		return []Finding{{
-			File:   ".git/config",
-			Rule:   RuleHooksPath,
-			Msg:    fmt.Sprintf("core.hooksPath is %q, want %q — hooks fire from an unreviewed location (shape A is retired)", val, hooksDir),
-			Repair: "git config core.hooksPath .githooks",
-		}}
+		return &Finding{
+			File:   file,
+			Rule:   rule,
+			Msg:    "core.hooksPath unset — git reads .git/hooks, so neither the fleet's global gates nor this repo's .githooks run",
+			Repair: globalHooksRepair,
+		}, ""
+	case localScope(scope):
+		return &Finding{
+			File:   file,
+			Rule:   rule,
+			Msg:    fmt.Sprintf("this repo sets core.hooksPath to %q (%s config) — a local hooks path shadows the fleet's global gates; no repo sets one", val, scope),
+			Repair: fmt.Sprintf("git config --%s --unset core.hooksPath", scope),
+		}, ""
 	}
-	return nil
+	return nil, val
+}
+
+// checkHooksPath verifies global forwarding is live (hooks-path): git reads
+// hooks from the global hooks dir, and this repo does not shadow it with a
+// local core.hooksPath.
+func checkHooksPath(ctx context.Context, dir string) []Finding {
+	f, global := hooksPathFinding(ctx, dir, ".git/config", RuleHooksPath)
+	if f != nil {
+		return []Finding{*f}
+	}
+	var findings []Finding
+	for _, event := range trackedHookEvents {
+		if event == "pre-push" {
+			continue // review-gate checks this link
+		}
+		rel := filepath.Join(hooksDir, event)
+		if gf := globalForwardFinding(dir, global, event, rel, RuleHooksPath); gf != nil {
+			findings = append(findings, *gf)
+		}
+	}
+	return findings
+}
+
+// globalForwardFinding returns a finding unless the global hooks dir holds an
+// executable hook for event that forwards to the repo's rel. A relative global
+// dir resolves against the work tree, where git runs hooks.
+func globalForwardFinding(dir, global, event, rel, rule string) *Finding {
+	if !filepath.IsAbs(global) {
+		global = filepath.Join(dir, global)
+	}
+	path := filepath.Join(global, event)
+	fi, statErr := os.Stat(path)
+	data, readErr := os.ReadFile(path)
+	if statErr == nil && fi.Mode()&0o111 != 0 && readErr == nil && bytes.Contains(data, []byte(forwardMarker)) {
+		return nil
+	}
+	return &Finding{
+		File:   rel,
+		Rule:   rule,
+		Msg:    "global " + event + " (" + path + ") is missing, not executable, or does not forward to " + rel + " — the repo's " + event + " hook never runs",
+		Repair: globalHooksRepair,
+	}
 }
 
 // checkBDHooks verifies every tracked hook event is present, executable, and
@@ -161,20 +229,17 @@ func checkBDHooks(dir string) []Finding {
 	return findings
 }
 
-// checkReviewGate verifies the pre-push chain end to end (review-gate): live
-// hooksPath, executable pre-push, delegation present. Any dead link means
-// the gate reads as protection and provides none.
+// checkReviewGate verifies the pre-push chain end to end (review-gate): the
+// global hooks dir in effect, its pre-push forwarding to the repo's, and the
+// repo's pre-push executable and delegating. Any dead link means the gate
+// reads as protection and provides none.
 func checkReviewGate(ctx context.Context, dir string) []Finding {
 	rel := filepath.Join(hooksDir, "pre-push")
 
-	val, err := hooksPathValue(ctx, dir)
-	if err != nil || val != hooksDir {
-		return []Finding{{
-			File:   rel,
-			Rule:   RuleReviewGate,
-			Msg:    "pre-push gate unreachable — core.hooksPath does not point at " + hooksDir,
-			Repair: "git config core.hooksPath .githooks",
-		}}
+	f, global := hooksPathFinding(ctx, dir, rel, RuleReviewGate)
+	if f != nil {
+		f.Msg = "pre-push gate unreachable — " + f.Msg
+		return []Finding{*f}
 	}
 
 	fi, statErr := os.Stat(filepath.Join(dir, rel))
@@ -185,6 +250,10 @@ func checkReviewGate(ctx context.Context, dir string) []Finding {
 			Msg:    "pre-push missing or not executable — nothing gates a push from this machine",
 			Repair: "bd hooks install && chmod +x " + rel,
 		}}
+	}
+
+	if gf := globalForwardFinding(dir, global, "pre-push", rel, RuleReviewGate); gf != nil {
+		return []Finding{*gf}
 	}
 
 	data, readErr := os.ReadFile(filepath.Join(dir, rel))

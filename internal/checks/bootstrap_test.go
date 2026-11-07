@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -56,15 +57,60 @@ func TestBootstrapPlanSetsEveryTrackedBDKey(t *testing.T) {
 	}
 }
 
-// TestBootstrapPlanWiresHooksPath: the plan runs checkHooksPath's own repair.
-func TestBootstrapPlanWiresHooksPath(t *testing.T) {
-	want := "git config core.hooksPath " + hooksDir
+// TestBootstrapPlanSetsNoLocalHooksPath: under global forwarding (decision
+// 51900b14be55) no repo sets a local core.hooksPath, so init must not write
+// the very finding checkHooksPath reports.
+func TestBootstrapPlanSetsNoLocalHooksPath(t *testing.T) {
 	for _, step := range BootstrapPlan(testSpec()) {
-		if step.String() == want {
-			return
+		if slices.Contains(step.Argv, "core.hooksPath") {
+			t.Errorf("plan sets core.hooksPath: %s", step)
 		}
 	}
-	t.Fatalf("plan does not run %q", want)
+}
+
+// TestBootstrapBDInitCommitRunsNoHooks: bd init's internal commit must fire
+// no hook, or the global pre-commit forwards into the tracked one, which
+// calls bd while bd init holds the Dolt lock (cfm-d4r). The bd init step's
+// env, given to a real git commit under a global hooks dir whose pre-commit
+// fails, lets the commit through.
+func TestBootstrapBDInitCommitRunsNoHooks(t *testing.T) {
+	var initStep Step
+	for _, step := range BootstrapPlan(testSpec()) {
+		if isBDInitStep(step) {
+			initStep = step
+		}
+	}
+	if len(initStep.Env) == 0 {
+		t.Fatal("bd init step sets no env; its internal commit runs the global hooks")
+	}
+
+	hooks := t.TempDir()
+	if err := os.WriteFile(filepath.Join(hooks, "pre-commit"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(cfg, []byte("[core]\n\thooksPath = "+hooks+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+
+	dir := t.TempDir()
+	git := func(env []string, args ...string) error {
+		cmd := exec.Command("git", append([]string{"-c", "user.email=a@b", "-c", "user.name=a", "-c", "commit.gpgsign=false"}, args...)...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), env...)
+		return cmd.Run()
+	}
+	if err := git(nil, "init", "-q"); err != nil {
+		t.Fatal(err)
+	}
+	if err := git(nil, "commit", "-q", "--allow-empty", "-m", "x"); err == nil {
+		t.Fatal("control: the failing global pre-commit did not run")
+	}
+	if err := git(initStep.Env, "commit", "-q", "--allow-empty", "-m", "x"); err != nil {
+		t.Errorf("commit under the bd init step's env still ran the global pre-commit: %v", err)
+	}
 }
 
 // TestRemoteStepsAreMarkedRemote: every gh step is flagged, so the default
@@ -183,32 +229,6 @@ func TestBootstrapSkipsRemoteByDefault(t *testing.T) {
 func withDefaults(spec ScaffoldSpec) ScaffoldSpec {
 	spec.applyDefaults()
 	return spec
-}
-
-// TestBootstrapPlanWiresHooksPathAfterBDInit: `bd init` runs `git commit`
-// internally. If core.hooksPath already points at the tracked .githooks by
-// then, that commit fires the tracked pre-commit hook, which delegates to
-// the .beads/hooks shim bd init itself just installed — a nested `bd`
-// invocation that contends with the still-running outer `bd init` for the
-// same Dolt lock and hangs until the bootstrap timeout kills it (cfm-d4r).
-// hooksPath must be wired only once bd init is done, so its own commit
-// still uses git's default (empty, on a fresh repo) hooks.
-func TestBootstrapPlanWiresHooksPathAfterBDInit(t *testing.T) {
-	hooksPathIdx, bdInitIdx := -1, -1
-	for i, step := range BootstrapPlan(testSpec()) {
-		switch {
-		case step.Argv[0] == "git" && len(step.Argv) > 1 && step.Argv[1] == "config":
-			hooksPathIdx = i
-		case step.Argv[0] == "bd" && len(step.Argv) > 1 && step.Argv[1] == "init":
-			bdInitIdx = i
-		}
-	}
-	if hooksPathIdx == -1 || bdInitIdx == -1 {
-		t.Fatalf("plan is missing hooksPath (%d) or bd init (%d)", hooksPathIdx, bdInitIdx)
-	}
-	if hooksPathIdx < bdInitIdx {
-		t.Errorf("git config core.hooksPath (step %d) runs before bd init (step %d) — bd init's own internal commit will self-deadlock through the tracked hook chain", hooksPathIdx, bdInitIdx)
-	}
 }
 
 // TestBootstrapHoldsBackSyncRemoteForBDInit: the scaffolded .beads/config.yaml
