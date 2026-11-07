@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/dkoosis/conform-to-sdlc/internal/checks"
@@ -18,7 +20,7 @@ bd hooks run "$(basename "$0")" "$@"
 # --- END BEADS INTEGRATION v1.0.5 ---
 `
 
-var hookEvents = []string{"post-checkout", "post-merge", "pre-commit", "pre-push", "prepare-commit-msg"}
+var hookEvents = []string{"post-checkout", "post-merge", "pre-commit", "pre-push"}
 
 // wrapperHook is an alternate shape (cfm-wml): a tracked wrapper that
 // exec-chains to bd's shim instead of carrying the inline managed block.
@@ -76,8 +78,10 @@ func globalHooks(t *testing.T, forwards bool) string {
 	if forwards {
 		body = "#!/bin/sh\n. \"$(dirname \"$0\")/lib/forward-to-repo-hook.sh\"\nforward_to_repo_hook pre-push \"\" \"$@\"\n"
 	}
-	if err := os.WriteFile(filepath.Join(hooks, "pre-push"), []byte(body), 0o755); err != nil {
-		t.Fatal(err)
+	for _, e := range hookEvents {
+		if err := os.WriteFile(filepath.Join(hooks, e), []byte(strings.ReplaceAll(body, "pre-push", e)), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
 	if err := os.WriteFile(cfg, []byte("[core]\n\thooksPath = "+hooks+"\n"), 0o644); err != nil {
@@ -198,6 +202,53 @@ func TestHooksPath_LocalCopyOfGlobalDir(t *testing.T) {
 		t.Fatalf("git config: %v\n%s", err, out)
 	}
 	assertOneOrClean(t, checks.CheckHooksPathFn(context.Background(), dir), checks.RuleHooksPath, "local config")
+}
+
+// A global dir that lacks a forwarder for a tracked hook silently disables
+// that hook, though the repo's copy is fine.
+func TestHooksPath_MissingForwarder(t *testing.T) {
+	dir := writeRepo(t, localRepo())
+	initGit(t, dir, "")
+	hooks := globalHooks(t, true)
+	if err := os.Remove(filepath.Join(hooks, "post-merge")); err != nil {
+		t.Fatal(err)
+	}
+	assertOneOrClean(t, checks.CheckHooksPathFn(context.Background(), dir), checks.RuleHooksPath, "global post-merge")
+}
+
+// bd's prepare-commit-msg runs from the global hook, so conform requires no
+// tracked copy (cfm-cdy).
+func TestBDHooks_NoPrepareCommitMsg(t *testing.T) {
+	t.Parallel()
+	files := localRepo()
+	files[".githooks/prepare-commit-msg"] = "#!/bin/sh\nexit 0\n"
+	dir := writeRepo(t, files)
+	assertOneOrClean(t, checks.CheckBDHooks(dir), checks.RuleBDHooks, "")
+	if slices.Contains(checks.TrackedHookEvents(), "prepare-commit-msg") {
+		t.Fatal("prepare-commit-msg is tracked")
+	}
+}
+
+func TestDelegatesToBD(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		hook string
+		want bool
+	}{
+		{"managed block", delegatingHook, true},
+		{"wrapper shape", wrapperHook, true},
+		{"bd hooks run call", "#!/bin/sh\nset -e\nbd hooks run pre-push \"$@\"\n", true},
+		{"no delegation", "#!/bin/sh\nexit 0\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := checks.DelegatesToBD([]byte(tt.hook)); got != tt.want {
+				t.Errorf("DelegatesToBD = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestBDHooks_Violations(t *testing.T) {

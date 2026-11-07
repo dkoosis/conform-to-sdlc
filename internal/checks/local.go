@@ -46,8 +46,10 @@ const (
 // noGitOpsFamily is what a no-git-ops exception expands to.
 var noGitOpsFamily = []string{RuleHooksShape, RuleHookExitDiscard, RuleHooksPath, RuleBDHooks, RuleReviewGate}
 
-// trackedHookEvents are the bd hook events a repo tracks in .githooks.
-var trackedHookEvents = []string{"post-checkout", "post-merge", "pre-commit", "pre-push", "prepare-commit-msg"}
+// trackedHookEvents are the bd hook events a repo tracks in .githooks. The
+// global prepare-commit-msg runs bd hooks run itself and never forwards, so a
+// tracked copy would never run (cfm-cdy).
+var trackedHookEvents = []string{"post-checkout", "post-merge", "pre-commit", "pre-push"}
 
 // Two delegation shapes are accepted (cfm-wml): the inline beads-managed block,
 // or a delegating wrapper that exec-chains to bd's shim in .beads/hooks/.
@@ -55,13 +57,15 @@ var trackedHookEvents = []string{"post-checkout", "post-merge", "pre-commit", "p
 const (
 	delegationMarker = "BEADS INTEGRATION"
 	delegationShim   = ".beads/hooks"
+	delegationRun    = "bd hooks run"
 )
 
 // delegatesToBD reports whether hook content hands the event to bd by either
 // accepted shape.
 func delegatesToBD(data []byte) bool {
 	return bytes.Contains(data, []byte(delegationMarker)) ||
-		bytes.Contains(data, []byte(delegationShim))
+		bytes.Contains(data, []byte(delegationShim)) ||
+		bytes.Contains(data, []byte(delegationRun))
 }
 
 const (
@@ -148,10 +152,42 @@ func hooksPathFinding(ctx context.Context, dir, file, rule string) (*Finding, st
 // hooks from the global hooks dir, and this repo does not shadow it with a
 // local core.hooksPath.
 func checkHooksPath(ctx context.Context, dir string) []Finding {
-	if f, _ := hooksPathFinding(ctx, dir, ".git/config", RuleHooksPath); f != nil {
+	f, global := hooksPathFinding(ctx, dir, ".git/config", RuleHooksPath)
+	if f != nil {
 		return []Finding{*f}
 	}
-	return nil
+	var findings []Finding
+	for _, event := range trackedHookEvents {
+		if event == "pre-push" {
+			continue // review-gate checks this link
+		}
+		rel := filepath.Join(hooksDir, event)
+		if gf := globalForwardFinding(dir, global, event, rel, RuleHooksPath); gf != nil {
+			findings = append(findings, *gf)
+		}
+	}
+	return findings
+}
+
+// globalForwardFinding returns a finding unless the global hooks dir holds an
+// executable hook for event that forwards to the repo's rel. A relative global
+// dir resolves against the work tree, where git runs hooks.
+func globalForwardFinding(dir, global, event, rel, rule string) *Finding {
+	if !filepath.IsAbs(global) {
+		global = filepath.Join(dir, global)
+	}
+	path := filepath.Join(global, event)
+	fi, statErr := os.Stat(path)
+	data, readErr := os.ReadFile(path)
+	if statErr == nil && fi.Mode()&0o111 != 0 && readErr == nil && bytes.Contains(data, []byte(forwardMarker)) {
+		return nil
+	}
+	return &Finding{
+		File:   rel,
+		Rule:   rule,
+		Msg:    "global " + event + " (" + path + ") is missing, not executable, or does not forward to " + rel + " — the repo's " + event + " hook never runs",
+		Repair: globalHooksRepair,
+	}
 }
 
 // checkBDHooks verifies every tracked hook event is present, executable, and
@@ -216,19 +252,8 @@ func checkReviewGate(ctx context.Context, dir string) []Finding {
 		}}
 	}
 
-	if !filepath.IsAbs(global) {
-		global = filepath.Join(dir, global) // git runs hooks from the work tree
-	}
-	globalPush := filepath.Join(global, "pre-push")
-	gfi, gStatErr := os.Stat(globalPush)
-	gdata, gReadErr := os.ReadFile(globalPush)
-	if gStatErr != nil || gfi.Mode()&0o111 == 0 || gReadErr != nil || !bytes.Contains(gdata, []byte(forwardMarker)) {
-		return []Finding{{
-			File:   rel,
-			Rule:   RuleReviewGate,
-			Msg:    "global pre-push (" + globalPush + ") is missing, not executable, or does not forward to " + rel + " — the repo's push gate never runs",
-			Repair: globalHooksRepair,
-		}}
+	if gf := globalForwardFinding(dir, global, "pre-push", rel, RuleReviewGate); gf != nil {
+		return []Finding{*gf}
 	}
 
 	data, readErr := os.ReadFile(filepath.Join(dir, rel))

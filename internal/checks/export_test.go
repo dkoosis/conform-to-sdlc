@@ -30,6 +30,7 @@ var (
 var (
 	CheckHooksPathFn = checkHooksPath
 	CheckBDHooks     = checkBDHooks
+	DelegatesToBD    = delegatesToBD
 	CheckReviewGate  = checkReviewGate
 	CheckBDLive      = checkBDLive
 )
@@ -60,3 +61,6 @@ func RootStrayNames() []string {
 	}
 	return names
 }
+
+// TrackedHookEvents returns the events conform requires a tracked hook for.
+func TrackedHookEvents() []string { return trackedHookEvents }
