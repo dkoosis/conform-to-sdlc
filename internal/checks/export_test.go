@@ -7,6 +7,7 @@ import "context"
 // along.
 var (
 	CheckMakefile     = checkMakefile
+	CheckGateSteps    = checkGateSteps
 	CheckLintFloor    = checkLintFloor
 	CheckLintPin      = checkLintPin
 	CheckCIGate       = checkCIGate

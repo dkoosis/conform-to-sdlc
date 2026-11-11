@@ -34,11 +34,20 @@ var (
 		{name: "race", alt: "test-race", doc: "Run tests with the race detector (fresh run)", recipe: "go test -race -count=1 -cover ./..."},
 		{name: "fuzz", doc: "Fuzz every Fuzz test (FUZZTIME=10s each)", recipe: `for pkg in $$(go list ./...); do for f in $$(go test -list '^Fuzz' $$pkg | sed -n '/^Fuzz/p'); do go test -run '^$$' -fuzz "^$$f$$" -fuzztime=$(FUZZTIME) $$pkg || exit 1; done; done`},
 		// jscpd exits 0 at any duplication unless given a threshold; 3% is the fleet's .jscpd.json value.
-		{name: "dupe", alt: "dupl", doc: "Fail above 3% code duplication (jscpd)", recipe: `npx --yes jscpd --threshold 3 --ignore '**/.git/**,**/.beads/**,**/.sandbox/**' .`},
+		{name: "dupe", alt: "dupl", doc: "Fail above 3% code duplication (jscpd)", recipe: `npx --yes jscpd@$(JSCPD_VER) --threshold 3 --ignore '**/.git/**,**/.beads/**,**/.sandbox/**' .`},
 		// -include-pkgs keeps nilaway's reports to code the repo can fix, not its dependencies.
-		{name: "nilcheck", alt: "nilaway", doc: "Run nilaway on this module's packages", recipe: "go run go.uber.org/nilaway/cmd/nilaway@latest -include-pkgs=$$(go list -m) ./..."},
-		{name: "deadcode", doc: "Fail on any function unreachable from main", recipe: `go list -f '{{.Name}}' ./... | grep -qx main || { echo "deadcode: no main package, nothing to trace"; exit 0; }; out=$$(go run golang.org/x/tools/cmd/deadcode@latest ./...) || { echo "deadcode: could not run"; exit 1; }; if [ -n "$$out" ]; then echo "$$out"; exit 1; fi`},
-		{name: "vuln", doc: "Scan for known vulnerabilities", recipe: "govulncheck ./..."},
+		{name: "nilcheck", alt: "nilaway", doc: "Run nilaway on this module's packages", recipe: "go run go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VER) -include-pkgs=$$(go list -m) ./..."},
+		{name: "deadcode", doc: "Fail on any function unreachable from main", recipe: `go list -f '{{.Name}}' ./... | grep -qx main || { echo "deadcode: no main package, nothing to trace"; exit 0; }; out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./...) || { echo "deadcode: could not run"; exit 1; }; if [ -n "$$out" ]; then echo "$$out"; exit 1; fi`},
+		{name: "vuln", doc: "Scan for known vulnerabilities", recipe: "go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VER) ./..."},
+	}
+
+	// gateVersions pins each tool an audit gate runs (tool-pin): the scaffold
+	// writes them into the Makefile, in this order. Values are sdlc's pins.
+	gateVersions = [][2]string{
+		{"NILAWAY_VER", "v0.0.0-20260918162853-acb8859b9031"},
+		{"GOVULNCHECK_VER", "v1.9.0"},
+		{"DEADCODE_VER", "v0.52.0"},
+		{"JSCPD_VER", "5.1.2"},
 	}
 
 	// toolTargets extend the floor for the tool profile only: a lib has no
@@ -232,17 +241,7 @@ func verbFindings(byName map[string]mkTarget, profile values.Profile) []Finding 
 // unreachedGates returns the audit gates that no prerequisite chain from
 // audit reaches, in auditGates order.
 func unreachedGates(byName map[string]mkTarget) []string {
-	reached := map[string]bool{}
-	queue := []string{"audit"}
-	for len(queue) > 0 {
-		name := queue[0]
-		queue = queue[1:]
-		if reached[name] {
-			continue
-		}
-		reached[name] = true
-		queue = append(queue, byName[name].prereqs...)
-	}
+	reached := reachable(byName, "audit")
 	var missing []string
 	for _, g := range auditGates {
 		if !reached[g.name] && !reached[g.alt] {

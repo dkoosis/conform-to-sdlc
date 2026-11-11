@@ -229,8 +229,8 @@ func TestScaffoldAuditGatesCheckSomething(t *testing.T) {
 	for _, want := range []string{
 		"\nFUZZTIME ?= 10s\n",
 		"-fuzztime=$(FUZZTIME) ",
-		"jscpd --threshold 3 --ignore '**/.git/**,**/.beads/**,**/.sandbox/**' .",
-		"nilaway@latest -include-pkgs=$$(go list -m) ./...",
+		"jscpd@$(JSCPD_VER) --threshold 3 --ignore '**/.git/**,**/.beads/**,**/.sandbox/**' .",
+		"nilaway@$(NILAWAY_VER) -include-pkgs=$$(go list -m) ./...",
 	} {
 		if !strings.Contains(mk, want) {
 			t.Errorf("scaffolded Makefile lacks %q", want)
