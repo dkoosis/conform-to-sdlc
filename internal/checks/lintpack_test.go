@@ -158,8 +158,8 @@ func TestRetiredFiles_PackDriftUnderRulesDir(t *testing.T) {
 
 	files := goodRepo()
 	files[lintpack.Dir+"/check-pack-drift.sh"] = "#!/bin/sh\nexit 0\n"
-	findings := checks.CheckRetiredFiles(writeRepo(t, files))
-	if len(findings) != 1 || findings[0].File != lintpack.Dir+"/check-pack-drift.sh" {
+	findings := checks.Run(writeRepo(t, files))
+	if len(findings) != 1 || findings[0].Rule != checks.RuleRetiredFiles || findings[0].File != lintpack.Dir+"/check-pack-drift.sh" {
 		t.Fatalf("want one retired-files finding for the pack's drift script, got %v", findings)
 	}
 }
@@ -240,7 +240,7 @@ func TestFix_LintPack(t *testing.T) {
 					t.Errorf("Fix changed the repo:\nbefore %s\nafter  %s", before, after)
 				}
 			}
-			got := rulesOf(checks.CheckLintPack(dir))[checks.RuleLintPack] > 0
+			got := rulesOf(checks.Run(dir))[checks.RuleLintPack] > 0
 			if got != tc.wantFinding {
 				t.Errorf("lint-pack finding after Fix = %v, want %v", got, tc.wantFinding)
 			}

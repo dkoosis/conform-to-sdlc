@@ -32,7 +32,7 @@ func checkLintPack(dir string) []Finding {
 			File:   lintpack.Dir + "/",
 			Rule:   RuleLintPack,
 			Msg:    "no lint rules pack — the ruleguard rules for the fleet's recurring Go defect classes do not run here",
-			Repair: "go tool conform-to-sdlc --fix (writes the pack when .golangci-rules/ is absent), then wire it into .golangci.yml",
+			Repair: "go tool conform-to-sdlc --fix (writes the pack when .golangci-rules/ is absent), then enable gocritic's ruleguard check on .golangci-rules/bugclasses.go and modern.go",
 		})
 	}
 

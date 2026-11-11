@@ -58,7 +58,7 @@ func fixLintPack(dir string) (string, error) {
 	if !created {
 		return "", nil
 	}
-	return fmt.Sprintf("created %s — the lintbrush rules pack conform-to-sdlc ships; wire it into .golangci.yml as gorules/golangci.snippet.yml in dkoosis/lintbrush shows", lintpack.Dir), nil
+	return fmt.Sprintf(`created %s — the lintbrush rules pack conform-to-sdlc ships; enable gocritic's ruleguard check in .golangci.yml with rules: "${base-path}/.golangci-rules/bugclasses.go,${base-path}/.golangci-rules/modern.go"`, lintpack.Dir), nil
 }
 
 // fixReadme writes a README.md skeleton when the repo root carries none.
