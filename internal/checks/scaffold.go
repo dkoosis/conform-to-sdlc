@@ -143,6 +143,7 @@ var baseArtifacts = []artifact{
 	{path: ".golangci.yml", mode: 0o644, body: renderGolangci},
 	{path: pinFile, mode: 0o644, body: renderProjectConf},
 	{path: ciGateFile, mode: 0o644, body: renderCheckWorkflow},
+	{path: auditWorkflowFile, mode: 0o644, body: renderAuditWorkflow},
 	{path: bdConfigFile, mode: 0o644, dirMode: 0o700, body: renderBDConfig},
 	{path: "go.mod", mode: 0o644, body: renderGoMod},
 	{path: "doc.go", mode: 0o644, body: renderDoc},

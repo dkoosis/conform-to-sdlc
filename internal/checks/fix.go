@@ -32,7 +32,7 @@ func Fix(dir string) ([]string, error) {
 		errs []error
 	)
 
-	for _, fix := range []func(string) (string, error){fixReadme, fixCheckWorkflow, fixLintPack, fixGolangci} {
+	for _, fix := range []func(string) (string, error){fixReadme, fixCheckWorkflow, fixAuditWorkflow, fixLintPack, fixGolangci} {
 		created, err := fix(dir)
 		if err != nil {
 			errs = append(errs, err)
