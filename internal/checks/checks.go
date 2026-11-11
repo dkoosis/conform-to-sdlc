@@ -124,7 +124,15 @@ func loadValues(dir string) (values.Values, []Finding) {
 	path := filepath.Join(dir, ValuesFile)
 	v, err := values.Load(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		if legacy, ok := loadLegacyValues(dir); ok {
+		if old, legacy, lerr := loadLegacyValues(dir); old != "" {
+			if lerr != nil {
+				return fallback, []Finding{{
+					File:   old,
+					Rule:   RuleValuesFile,
+					Msg:    lerr.Error(),
+					Repair: "fix " + old + " (profile tool|lib; every exception needs rule + reason), then git mv it to " + ValuesFile,
+				}}
+			}
 			return legacy, nil
 		}
 	}
@@ -147,15 +155,28 @@ func loadValues(dir string) (values.Values, []Finding) {
 	return *v, nil
 }
 
-// loadLegacyValues returns the first readable old-name values file.
-func loadLegacyValues(dir string) (values.Values, bool) {
+// loadLegacyValues reads the first old-name values file that exists and
+// returns its path with its values or its parse error. Like the docs/ file, an
+// invalid old-name file is reported as it stands, never skipped for the next
+// one. No old-name file at all returns an empty path.
+func loadLegacyValues(dir string) (string, values.Values, error) {
 	for _, old := range LegacyValuesFiles {
-		if legacy, err := values.Load(filepath.Join(dir, old)); err == nil && legacy != nil {
-			return *legacy, true
+		v, err := values.Load(filepath.Join(dir, old))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
 		}
+		if err != nil {
+			return old, values.Values{}, err
+		}
+		if v == nil {
+			return old, values.Values{}, errNilValues
+		}
+		return old, *v, nil
 	}
-	return values.Values{}, false
+	return "", values.Values{}, nil
 }
+
+var errNilValues = errors.New("values file parsed to nothing")
 
 // applyExceptions drops findings whose rule id the repo has excepted with a
 // reason. The exception mechanism is the only sanctioned suppression — there

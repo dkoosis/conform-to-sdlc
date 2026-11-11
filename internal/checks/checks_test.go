@@ -139,6 +139,24 @@ func TestRun_InvalidDocsValuesFileDoesNotFallBack(t *testing.T) {
 	}
 }
 
+// TestRun_InvalidOldNameValuesFileIsReported: a broken docs/conform.json is
+// reported with its parse error on that file, and a valid root conform.json is
+// not used in its place.
+func TestRun_InvalidOldNameValuesFileIsReported(t *testing.T) {
+	files := goodRepo()
+	delete(files, checks.ValuesFile)
+	files[checks.LegacyValuesFiles[0]] = `{"profile": "tool", "exceptions": [{"rule": "x"}]}`
+	files[checks.LegacyValuesFiles[1]] = goodValues
+	findings := checks.Run(writeRepo(t, files))
+
+	for _, f := range findings {
+		if f.Rule == checks.RuleValuesFile && f.File == checks.LegacyValuesFiles[0] && strings.Contains(f.Msg, "reason") {
+			return
+		}
+	}
+	t.Errorf("no values-file finding with the parse error on %s: %v", checks.LegacyValuesFiles[0], findings)
+}
+
 // TestRun_LibProfile: libs are the contract minus deploy — a deploy verb is
 // a finding, its absence is not.
 func TestRun_LibProfile(t *testing.T) {
