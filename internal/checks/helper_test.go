@@ -81,6 +81,17 @@ jobs:
         run: make race
 `
 
+const goodAuditYML = `name: audit
+on:
+  schedule:
+    - cron: '41 7 * * *'
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make audit
+`
+
 const goodCodexYML = `name: codex-review
 on:
   issue_comment:
@@ -116,6 +127,7 @@ func goodRepo() map[string]string {
 		".golangci.yml":                      checks.CanonicalGolangci,
 		".sandbox/project.conf":              goodProjectConf,
 		".github/workflows/check.yml":        goodCheckYML,
+		".github/workflows/audit.yml":        goodAuditYML,
 		".github/workflows/codex-review.yml": goodCodexYML,
 		"README.md":                          "# repo\n\nwhat this repo is, in one paragraph.\n",
 		".githooks/pre-commit":               "#!/bin/sh\nexit 0\n",

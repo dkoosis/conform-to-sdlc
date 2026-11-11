@@ -9,20 +9,21 @@ import (
 // them directly so unit cases don't drag the whole runner (and its bd exec)
 // along.
 var (
-	CheckMakefile     = checkMakefile
-	CheckFuzzCoverage = checkFuzzCoverage
-	CheckGateSteps    = checkGateSteps
-	CheckLintFloor    = checkLintFloor
-	CheckLintPin      = checkLintPin
-	CheckLintPack     = checkLintPack
-	CheckLintSet      = checkLintSet
-	CheckCIGate       = checkCIGate
-	CheckCIDocsSkip   = checkCIDocsSkip
-	CheckCodexShape   = checkCodexShape
-	CheckRetiredFiles = checkRetiredFiles
-	CheckBDConfig     = checkBDConfig
-	CheckHooksShape   = checkHooksShape
-	CheckRootMinimal  = checkRootMinimal
+	CheckMakefile        = checkMakefile
+	CheckFuzzCoverage    = checkFuzzCoverage
+	CheckGateSteps       = checkGateSteps
+	CheckLintFloor       = checkLintFloor
+	CheckLintPin         = checkLintPin
+	CheckLintPack        = checkLintPack
+	CheckLintSet         = checkLintSet
+	CheckCIGate          = checkCIGate
+	CheckCIAuditSchedule = checkCIAuditSchedule
+	CheckCIDocsSkip      = checkCIDocsSkip
+	CheckCodexShape      = checkCodexShape
+	CheckRetiredFiles    = checkRetiredFiles
+	CheckBDConfig        = checkBDConfig
+	CheckHooksShape      = checkHooksShape
+	CheckRootMinimal     = checkRootMinimal
 )
 
 // CheckHookExitDiscard is the hook-exit-discard rule's directory-scanning

@@ -63,6 +63,7 @@ const (
 	RuleGateSkip        = "gate-skip"            // a check or audit step exits 0 when its tool is missing
 	RuleToolPin         = "tool-pin"             // a gate tool runs on PATH, at @latest, or at an unset version
 	RuleFuzzCoverage    = "fuzz-coverage"        // a Fuzz function the fuzz target does not run
+	RuleCIAuditSchedule = "ci-audit-schedule"    // no workflow runs make audit on a schedule
 	RuleHookExitDiscard = "hook-exit-discard"    // a hook swallows a tool's exit status with nothing that surfaces the failure
 )
 
@@ -93,6 +94,7 @@ func Run(dir string) []Finding {
 	findings = append(findings, checkLintPin(dir)...)
 	findings = append(findings, checkCIGate(dir)...)
 	findings = append(findings, checkCIDocsSkip(dir)...)
+	findings = append(findings, checkCIAuditSchedule(dir)...)
 	findings = append(findings, checkCodexShape(dir)...)
 	findings = append(findings, checkRetiredFiles(dir)...)
 	findings = append(findings, checkBDConfig(dir)...)
