@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // Profile is a repo's SDLC surface. There are exactly two: the reference
@@ -35,10 +36,17 @@ type Exception struct {
 	Rule   string            `json:"rule"`
 	Reason string            `json:"reason,omitempty"`
 	Drop   map[string]string `json:"drop,omitempty"`
+	// Allow is the deadcode-filter exception: each function the repo's
+	// deadcode target may filter out of deadcode's output, with a reason.
+	Allow map[string]string `json:"allow,omitempty"`
 }
 
 // DropRule is the one rule id an exception may carry a drop for.
 const DropRule = "lint-set"
+
+// FilterRule is the one rule id an exception may carry an allow list for, and
+// the only way to excuse it: a plain exception on it is invalid.
+const FilterRule = "deadcode-filter"
 
 // Values is one repo's repo-standard.json: its profile plus its declared
 // exceptions.
@@ -57,6 +65,11 @@ var (
 	ErrEmptyReason = errors.New("exception reason must not be empty")
 	// ErrDropRule marks a drop on a rule other than DropRule.
 	ErrDropRule = errors.New(`only a "lint-set" exception may carry a drop`)
+	// ErrAllowRule marks an allow on a rule other than FilterRule, or a
+	// FilterRule exception with no allow list.
+	ErrAllowRule = errors.New(`only a "deadcode-filter" exception carries allow, and it must carry one: {"rule": "deadcode-filter", "allow": {"<function>": "<reason>"}}`)
+	// ErrAllowReason marks an allowed function with an empty reason.
+	ErrAllowReason = errors.New("every allowed function needs a reason")
 	// ErrDuplicateRule marks two exceptions in the same file declaring the
 	// same rule id.
 	ErrDuplicateRule = errors.New("duplicate exception rule")
@@ -135,7 +148,17 @@ func (v *Values) validate() error {
 			return fmt.Errorf("exception %d (rule %q): %w", i, exc.Rule, ErrDropRule)
 		}
 
-		if exc.Reason == "" && len(exc.Drop) == 0 {
+		if (len(exc.Allow) > 0) != (exc.Rule == FilterRule) {
+			return fmt.Errorf("exception %d (rule %q): %w", i, exc.Rule, ErrAllowRule)
+		}
+
+		for fn, why := range exc.Allow {
+			if strings.TrimSpace(fn) == "" || strings.TrimSpace(why) == "" {
+				return fmt.Errorf("exception %d (rule %q, function %q): %w", i, exc.Rule, fn, ErrAllowReason)
+			}
+		}
+
+		if exc.Reason == "" && len(exc.Drop) == 0 && len(exc.Allow) == 0 {
 			return fmt.Errorf("exception %d (rule %q): %w", i, exc.Rule, ErrEmptyReason)
 		}
 

@@ -217,8 +217,13 @@ func TestScaffoldStandardRunsThisTool(t *testing.T) {
 		t.Fatalf("scaffolded Makefile has no standard target:\n%s", mk)
 	}
 	lines := strings.SplitN(after, "\n", 3)
-	if len(lines) < 2 || lines[1] != "\trepo-standard" {
-		t.Errorf("standard recipe = %q; want %q", lines[1], "\trepo-standard")
+	// The PATH form trips tool-pin in a repo that pins the checker; the scaffold writes the pinned go run form.
+	const want = "\tgo run github.com/dkoosis/repo-standard/cmd/repo-standard@$(REPO_STANDARD_VER)"
+	if len(lines) < 2 || lines[1] != want {
+		t.Errorf("standard recipe = %q; want %q", lines[1], want)
+	}
+	if !strings.Contains(mk, "\nREPO_STANDARD_VER := v") {
+		t.Error("scaffolded Makefile does not set REPO_STANDARD_VER")
 	}
 }
 

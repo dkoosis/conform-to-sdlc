@@ -302,8 +302,8 @@ func renderMakefile(spec ScaffoldSpec) string {
 		fmt.Fprintf(&b, "\tfor a in amd64 arm64; do mkdir -p .sandbox/bin/linux-$$a && CGO_ENABLED=0 GOOS=linux GOARCH=$$a go build -o .sandbox/bin/linux-$$a/ ./cmd/%s; done\n\n", spec.Repo)
 	}
 
-	b.WriteString("standard: ## Run repo-standard (fleet SDLC checker) against this repo\n")
-	b.WriteString("\trepo-standard\n\n")
+	b.WriteString("standard: ## Run repo-standard (fleet SDLC checker, pinned) against this repo\n")
+	b.WriteString("\tgo run github.com/dkoosis/repo-standard/cmd/repo-standard@$(REPO_STANDARD_VER)\n\n")
 	b.WriteString("clean: ## Remove build outputs\n")
 	b.WriteString("\trm -rf bin .sandbox/bin\n\n")
 
