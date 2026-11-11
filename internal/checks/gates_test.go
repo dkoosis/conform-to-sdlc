@@ -48,7 +48,9 @@ func TestGateSkip_Passes(t *testing.T) {
 	t.Parallel()
 	loud := "\t@if ! command -v nilaway >/dev/null 2>&1; then \\\n\t\techo \"nilaway not installed\" >&2; exit 1; \\\n\tfi; go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...\n"
 	loudOr := "\t@command -v nilaway >/dev/null || { echo missing >&2; exit 1; }; go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...\n"
-	for name, recipe := range map[string]string{"if": loud, "or": loudOr} {
+	loudElse := "\t@if command -v nilaway >/dev/null 2>&1; then go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; else echo \"nilaway not installed\" >&2; exit 1; fi\n"
+	andOr := "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./... || { echo missing >&2; exit 1; }\n"
+	for name, recipe := range map[string]string{"if": loud, "or": loudOr, "positive if, loud else": loudElse, "and-run, loud or": andOr} {
 		if got := gateFindings(t, withRecipe("nilcheck", recipe), ""); len(got) != 0 {
 			t.Errorf("%s: loud missing branch produced %v", name, got)
 		}

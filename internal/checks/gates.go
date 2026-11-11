@@ -241,7 +241,7 @@ func skipFindings(target string, cmd recipeCmd) []Finding {
 					branch = cmd.text[m[2*s.missing]:m[2*s.missing+1]]
 				}
 				if missingExit.MatchString(branch) {
-					continue
+					break // the first shape that matches decides; a loud branch passes
 				}
 				findings = append(findings, Finding{
 					File: makefileFile,
