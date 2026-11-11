@@ -290,14 +290,17 @@ func blockSkips(text string, blocks []ifBlock, look *regexp.Regexp) []int {
 // run` with no `||` after it.
 func statementSkips(rest string, look *regexp.Regexp) []int {
 	var at []int
-	for _, st := range statements(rest) {
+	sts := statements(rest)
+	for n, st := range sts {
 		loc := look.FindStringIndex(st.text)
 		if loc == nil {
 			continue
 		}
 		after := st.text[loc[1]:]
 		i := strings.Index(after, "||")
-		silent := i < 0 && strings.Contains(after, "&&")
+		// `T && run` as a recipe line's last statement fails when T is missing
+		// (the list's status is 1); it passes only when another statement follows.
+		silent := i < 0 && strings.Contains(after, "&&") && laterStatement(sts[n+1:])
 		if i >= 0 {
 			silent = !missingExit.MatchString(after[i:])
 		}
@@ -379,6 +382,16 @@ func keywordAt(text string, from, to int) bool {
 		return false
 	}
 	return to == len(text) || strings.ContainsRune(" \t\n;)}\\", rune(text[to]))
+}
+
+// laterStatement says whether any of sts holds a command.
+func laterStatement(sts []statement) bool {
+	for _, st := range sts {
+		if strings.TrimSpace(strings.Trim(st.text, "\\")) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 type statement struct {

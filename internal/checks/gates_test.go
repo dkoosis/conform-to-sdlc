@@ -36,7 +36,7 @@ func TestGateSkip_Fails(t *testing.T) {
 		"inner if after then":        "\t@if [ -f go.sum ]; then if ! command -v nilaway >/dev/null; then echo skipped; exit 0; fi; fi\n",
 		"inner if after fi":          "\t@if [ -f a ]; then :; fi;if ! command -v nilaway >/dev/null; then echo skipped; exit 0; fi\n",
 		"or-branch":                  "\t@command -v nilaway >/dev/null || echo skipped\n",
-		"and-run":                    "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...\n",
+		"and-run":                    "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; echo done\n",
 	}
 	for name, recipe := range skips {
 		t.Run(name, func(t *testing.T) {
@@ -60,6 +60,10 @@ func TestGateSkip_Passes(t *testing.T) {
 		if got := gateFindings(t, withRecipe("nilcheck", recipe), ""); len(got) != 0 {
 			t.Errorf("%s: loud missing branch produced %v", name, got)
 		}
+	}
+	// `T && run` as the last statement fails when T is missing: not a skip.
+	if got := gateFindings(t, withRecipe("nilcheck", "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...\n"), ""); len(got) != 0 {
+		t.Errorf("trailing and-run produced %v", got)
 	}
 	// A skip in a target audit does not reach is a deploy step, not a gate.
 	mk := goodMakefile + "deploy-sign: ## sign\n\t@command -v nilaway >/dev/null || echo skipped\n"
