@@ -34,7 +34,7 @@ var (
 	makeVarRef  = regexp.MustCompile(`\$[({]\w+[)}]`)
 	shellSep    = strings.NewReplacer(";", " ", "|", " ", "&", " ", "(", " ", ")", " ", "{", " ", "}", " ", "!", " ", "<", " ", ">", " ", "\\", " ", "\n", " ", "\t", " ")
 	makeAssign  = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*(?:::=|:=|\?=|=)\s*(.*)$`)
-	pinnedVer   = regexp.MustCompile(`^v?\d`)
+	pinnedVer   = regexp.MustCompile(`^(?:v?\d|[0-9a-f]{7,40}$)`)
 	confLine    = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$`)
 	missingExit = regexp.MustCompile(`\bexit\s+(?:[1-9]|\$)|\bfalse\b`)
 
@@ -240,16 +240,26 @@ func skipFindings(target string, cmd recipeCmd) []Finding {
 	return findings
 }
 
-// blankBlocks blanks every if block, so the statements left are the ones
-// outside any block.
+// blankBlocks blanks each if block's keywords and condition, so the bodies
+// read as plain statements: a presence test nested in another if still counts.
+// blockSkips judges the conditions themselves.
 func blankBlocks(text string, blocks []ifBlock) string {
 	rest := []byte(text)
-	for _, b := range blocks {
-		for i := b.start; i < b.end; i++ {
+	blank := func(from, to int) {
+		for i := from; i < to && i < len(rest); i++ {
 			if rest[i] != '\n' {
 				rest[i] = ' '
 			}
 		}
+	}
+	for _, b := range blocks {
+		blank(b.start, b.thenAt+len("then"))
+		if b.elseAt >= 0 {
+			blank(b.elseAt, b.elseAt+len("else"))
+			rest[b.elseAt] = ';'
+		}
+		blank(b.end-len("fi"), b.end)
+		rest[b.end-len("fi")] = ';'
 	}
 	return string(rest)
 }
@@ -300,7 +310,7 @@ func statementSkips(rest string, look *regexp.Regexp) []int {
 
 var (
 	negatedTest = regexp.MustCompile(`!\s*$`)
-	ifKeyword   = regexp.MustCompile(`(?:^|[\s;{(@+-])(if|then|else|elif|fi)(?:[\s;)}]|$)`)
+	ifKeyword   = regexp.MustCompile(`\b(if|then|else|elif|fi)\b`)
 )
 
 // blankQuotes replaces each quoted string with blanks, keeping newlines so
@@ -334,6 +344,9 @@ func ifBlocks(text string) []ifBlock {
 	var stack, out []ifBlock
 	for _, m := range ifKeyword.FindAllStringSubmatchIndex(text, -1) {
 		kw, at := text[m[2]:m[3]], m[2]
+		if !keywordAt(text, m[2], m[3]) {
+			continue
+		}
 		if kw == "if" {
 			stack = append(stack, ifBlock{start: at, thenAt: -1, elseAt: -1})
 			continue
@@ -359,6 +372,15 @@ func ifBlocks(text string) []ifBlock {
 	return out
 }
 
+// keywordAt says whether text[from:to] stands as a shell word: not inside a
+// name, path or flag (go-if, a/fi, --then) and followed by a break.
+func keywordAt(text string, from, to int) bool {
+	if from > 0 && strings.ContainsRune("-./$_=", rune(text[from-1])) {
+		return false
+	}
+	return to == len(text) || strings.ContainsRune(" \t\n;)}\\", rune(text[to]))
+}
+
 type statement struct {
 	at   int
 	text string
@@ -374,7 +396,7 @@ func statements(text string) []statement {
 			depth++
 		case r == '}':
 			depth = max(depth-1, 0)
-		case (r == ';' || r == '\n') && depth == 0:
+		case (r == ';' || (r == '\n' && !strings.HasSuffix(text[:i], "\\"))) && depth == 0:
 			out = append(out, statement{from, text[from:i]})
 			from = i + 1
 		}
@@ -418,6 +440,9 @@ func pinFindings(target string, cmd recipeCmd, vars map[string]makeVar, conf map
 		if i > 0 {
 			prev = toks[i-1]
 		}
+		if strings.HasPrefix(prev, "-") && !slices.Contains(npxFlags, prev) {
+			continue // a tool named as a flag's value, such as --enable staticcheck
+		}
 		switch prev {
 		case "-v", "which", "type", "hash", "wrap", "install", "echo", "printf":
 			continue
@@ -429,6 +454,8 @@ func pinFindings(target string, cmd recipeCmd, vars map[string]makeVar, conf map
 	}
 	return findings
 }
+
+var npxFlags = []string{"--yes", "-y", "--no-install", "--quiet", "-q"}
 
 func isGateTool(s string) bool { return slices.Contains(gateTools, s) }
 

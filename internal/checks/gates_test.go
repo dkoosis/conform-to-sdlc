@@ -32,6 +32,9 @@ func TestGateSkip_Fails(t *testing.T) {
 		"positive if, no else":       "\t@if command -v nilaway >/dev/null 2>&1; then \\\n\t\tgo run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; \\\n\tfi\n",
 		"silent if, later loud else": "\t@if command -v nilaway >/dev/null 2>&1; then \\\n\t\tgo run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; \\\n\tfi; \\\n\tif [ -f go.sum ]; then :; else echo no go.sum >&2; exit 1; fi\n",
 		"silent and-or, later exit":  "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./... || echo skipped; \\\n\ttest -f go.sum || exit 1\n",
+		"nested in another if":       "\t@if [ -f go.sum ]; then command -v nilaway >/dev/null || echo skipped; fi\n",
+		"inner if after then":        "\t@if [ -f go.sum ]; then if ! command -v nilaway >/dev/null; then echo skipped; exit 0; fi; fi\n",
+		"inner if after fi":          "\t@if [ -f a ]; then :; fi;if ! command -v nilaway >/dev/null; then echo skipped; exit 0; fi\n",
 		"or-branch":                  "\t@command -v nilaway >/dev/null || echo skipped\n",
 		"and-run":                    "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...\n",
 	}
@@ -52,7 +55,8 @@ func TestGateSkip_Passes(t *testing.T) {
 	loudOr := "\t@command -v nilaway >/dev/null || { echo missing >&2; exit 1; }; go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...\n"
 	loudElse := "\t@if command -v nilaway >/dev/null 2>&1; then go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; else echo \"nilaway not installed\" >&2; exit 1; fi\n"
 	andOr := "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./... || { echo missing >&2; exit 1; }\n"
-	for name, recipe := range map[string]string{"if": loud, "or": loudOr, "positive if, loud else": loudElse, "and-run, loud or": andOr} {
+	contLoud := "\t@command -v nilaway >/dev/null 2>&1 || \\\n\t\t{ echo missing >&2; exit 1; }; go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...\n"
+	for name, recipe := range map[string]string{"continued loud or": contLoud, "if": loud, "or": loudOr, "positive if, loud else": loudElse, "and-run, loud or": andOr} {
 		if got := gateFindings(t, withRecipe("nilcheck", recipe), ""); len(got) != 0 {
 			t.Errorf("%s: loud missing branch produced %v", name, got)
 		}
@@ -121,5 +125,13 @@ func TestToolPin_VersionFromInclude(t *testing.T) {
 	dir := writeRepo(t, map[string]string{"Makefile": mk, ".sandbox/lib/Makefile.cross.mk": "GOVULNCHECK_VER ?= v1.1.4\n"})
 	if got := checks.CheckGateSteps(dir); len(got) != 0 {
 		t.Errorf("version set by an include produced %v", got)
+	}
+}
+
+func TestToolPin_FlagValueAndHash(t *testing.T) {
+	t.Parallel()
+	mk := withRecipe("vuln", "\tgolangci-lint run --enable staticcheck ./...\n\tgo run go.uber.org/nilaway/cmd/nilaway@acb8859b9031 ./...\n")
+	if got := gateFindings(t, mk, ""); len(got) != 0 {
+		t.Errorf("flag value and commit-hash pin produced %v", got)
 	}
 }
