@@ -368,7 +368,8 @@ func (b ifBlock) elseBody(text string) string {
 
 // ifBlocks finds every if … fi block, nested ones included.
 func ifBlocks(text string) []ifBlock {
-	var stack, out []ifBlock
+	stack := make([]ifBlock, 0, 4)
+	out := make([]ifBlock, 0, 4)
 	for _, m := range ifKeyword.FindAllStringSubmatchIndex(text, -1) {
 		kw, at := text[m[2]:m[3]], m[2]
 		if !keywordAt(text, m[2], m[3]) {
