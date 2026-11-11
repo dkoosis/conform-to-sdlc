@@ -1,6 +1,7 @@
 package checks_test
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -278,6 +279,9 @@ func snapshot(t *testing.T, dir string) string {
 // TestLintPack_Atomicfile: a repo whose go.mod requires dkoosis/atomicfile must
 // hold the raw-state-write rule file byte-equal and name it in its ruleguard
 // rules glob; a repo without atomicfile, and atomicfile itself, are left alone.
+// dslKept is what a go.mod adds so gocritic's ruleguard can load the pack.
+const dslKept = "\ntool github.com/quasilyte/go-ruleguard/dsl\n\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n"
+
 func TestLintPack_Atomicfile(t *testing.T) {
 	t.Parallel()
 
@@ -361,7 +365,7 @@ func TestLintPack_Atomicfile(t *testing.T) {
 			t.Parallel()
 			files := goodRepo()
 			if tt.gomod != "" {
-				files["go.mod"] = tt.gomod
+				files["go.mod"] = tt.gomod + dslKept
 			}
 			tt.edit(t, files)
 			got := checks.CheckLintPack(writeRepo(t, files))
@@ -426,7 +430,53 @@ func TestFix_AtomicfileRepoPassesLintPack(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, lintpack.Dir, "optin_rawstatewrite.go")); err != nil {
 		t.Errorf("--fix did not write optin_rawstatewrite.go: %v", err)
 	}
-	if got := checks.CheckLintPack(dir); len(got) != 0 {
-		t.Errorf("lint-pack after --fix = %+v, want none", got)
+	if !strings.Contains(strings.Join(done, "\n"), "go get -tool github.com/quasilyte/go-ruleguard/dsl@v0.3.23") {
+		t.Errorf("--fix's pack message omits the go get -tool repair: %v", done)
+	}
+	// go.mod is the repo's own: the one finding left is the dsl, with its command.
+	if got := checks.CheckLintPack(dir); len(got) != 1 || got[0].File != "go.mod" {
+		t.Errorf("lint-pack after --fix = %+v, want only the go.mod dsl finding", got)
+	}
+}
+
+func TestLintPack_RuleguardDSL(t *testing.T) {
+	t.Parallel()
+	const head = "module example.com/app\n\ngo 1.26\n"
+	tests := map[string]struct {
+		gomod string
+		files map[string]string
+		fails bool
+	}{
+		"no go.mod: silent":               {gomod: "", files: nil},
+		"nothing keeps the dsl":           {gomod: head, fails: true},
+		"require only, no import or tool": {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
+		"tool without require":            {gomod: head + "\ntool github.com/quasilyte/go-ruleguard/dsl\n", fails: true},
+		"tool line and require":           {gomod: head + dslKept},
+		"tool block and require block":    {gomod: head + "\ntool (\n\tgithub.com/quasilyte/go-ruleguard/dsl\n)\n\nrequire (\n\tgithub.com/quasilyte/go-ruleguard/dsl v0.3.23 // indirect\n)\n"},
+		"require plus tools.go import":    {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", files: map[string]string{"tools.go": "//go:build tools\n\npackage tools\n\nimport _ \"github.com/quasilyte/go-ruleguard/dsl\"\n"}},
+		"import only in the hidden pack":  {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
+		"another tool does not count":     {gomod: head + "\ntool golang.org/x/tools/cmd/deadcode\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			files := goodRepo()
+			maps.Copy(files, tc.files)
+			if tc.gomod != "" {
+				files["go.mod"] = tc.gomod
+			}
+			var got []string
+			for _, f := range checks.Run(writeRepo(t, files)) {
+				if f.Rule == checks.RuleLintPack && f.File == "go.mod" {
+					got = append(got, f.Msg+" | "+f.Repair)
+				}
+			}
+			if tc.fails != (len(got) == 1) || len(got) > 1 {
+				t.Fatalf("fails=%v, got %v", tc.fails, got)
+			}
+			if tc.fails && !strings.Contains(got[0], "go get -tool github.com/quasilyte/go-ruleguard/dsl@v0.3.23") {
+				t.Errorf("repair does not name the command: %s", got[0])
+			}
+		})
 	}
 }

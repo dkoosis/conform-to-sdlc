@@ -146,7 +146,9 @@ var baseArtifacts = []artifact{
 	{path: auditWorkflowFile, mode: 0o644, body: renderAuditWorkflow},
 	{path: bdConfigFile, mode: 0o644, dirMode: 0o700, body: renderBDConfig},
 	{path: "go.mod", mode: 0o644, body: renderGoMod},
+	{path: "go.sum", mode: 0o644, body: renderGoSum},
 	{path: "doc.go", mode: 0o644, body: renderDoc},
+	{path: "doc_test.go", mode: 0o644, body: renderDocTest},
 }
 
 // scaffoldArtifacts is the skeleton, one entry per file. The paths are the
@@ -527,8 +529,18 @@ fi
 	}
 }
 
+// renderGoMod keeps the ruleguard dsl with a tool directive: the pack's rule
+// files sit in a dot-directory no build reaches, so a bare require would not
+// survive `go mod tidy` and gocritic's ruleguard would fail to load the pack.
 func renderGoMod(spec ScaffoldSpec) string {
-	return fmt.Sprintf("module %s\n\ngo %s\n", spec.Module, spec.GoVer)
+	return fmt.Sprintf("module %s\n\ngo %s\n\ntool %s\n\nrequire %s %s // indirect\n", spec.Module, spec.GoVer, ruleguardDSL, ruleguardDSL, ruleguardDSLVersion)
+}
+
+// renderGoSum holds the dsl's two checksums, so the scaffold builds offline.
+// TestScaffoldGoSumMatchesTheDSL pins them to this module's go.sum.
+func renderGoSum(ScaffoldSpec) string {
+	return ruleguardDSL + " " + ruleguardDSLVersion + " " + ruleguardDSLSum + "\n" +
+		ruleguardDSL + " " + ruleguardDSLVersion + "/go.mod " + ruleguardDSLModSum + "\n"
 }
 
 // renderDoc gives `go build ./...` and `go vet ./...` a package to chew on,
@@ -542,6 +554,13 @@ func renderReadme(spec ScaffoldSpec) string {
 func renderDoc(spec ScaffoldSpec) string {
 	return fmt.Sprintf("// Package %s is the root of the %s module.\n//\n// Scaffolded by `repo-standard init`. Replace this file with real code.\npackage %s\n",
 		goIdent(spec.Repo), spec.Repo, goIdent(spec.Repo))
+}
+
+// renderDocTest gives the deadcode gate a root: with no main package it traces
+// from tests (`deadcode -test`), and fails with "no main packages" when the
+// module holds none.
+func renderDocTest(spec ScaffoldSpec) string {
+	return fmt.Sprintf("package %s\n\nimport \"testing\"\n\n// TestPackage is the scaffold's one test; replace it with real ones.\nfunc TestPackage(t *testing.T) {\n\tt.Parallel()\n}\n", goIdent(spec.Repo))
 }
 
 // goIdent turns a repo name into a legal package identifier.

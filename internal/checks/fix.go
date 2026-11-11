@@ -91,7 +91,12 @@ func fixLintPack(dir string) (string, error) {
 	if lintpack.UsesAtomicfile(dir) {
 		rules += ",${base-path}/" + lintpack.Dir + "/" + rawStateWriteFile // this repo requires atomicfile: rule 2 must run
 	}
-	return fmt.Sprintf(`created %s — the lintbrush rules pack repo-standard ships; enable gocritic's ruleguard check in .golangci.yml with rules: %q`, lintpack.Dir, rules), nil
+	msg := fmt.Sprintf(`created %s — the lintbrush rules pack repo-standard ships; enable gocritic's ruleguard check in .golangci.yml with rules: %q`, lintpack.Dir, rules)
+	if ruleguardDSLFindings(dir) != nil {
+		// go.mod is a person's file and the checksums need the network: say the command rather than edit it.
+		msg += "; then run `go get -tool " + ruleguardDSL + "@" + ruleguardDSLVersion + "` so go.mod keeps the dsl the pack imports"
+	}
+	return msg, nil
 }
 
 // fixReadme writes a README.md skeleton when the repo root carries none.

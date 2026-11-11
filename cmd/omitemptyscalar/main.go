@@ -4,7 +4,9 @@
 //
 //	go run github.com/dkoosis/repo-standard/cmd/omitemptyscalar@<version> ./...
 //
-// A deliberate case takes `//nolint:omitemptyscalar // reason` on the field.
+// A deliberate case takes `//omitemptyscalar:ignore <reason>` on the field (the
+// older `//nolint:omitemptyscalar` also works, but golangci-lint warns about the
+// unknown linter name).
 // The gate is described in repo-standard's README, section "Rules the audit
 // and lint standard adds".
 package main

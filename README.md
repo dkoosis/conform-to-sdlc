@@ -59,7 +59,9 @@ the repo. `omitempty` runs `go run github.com/dkoosis/repo-standard/cmd/omitempt
 (the analyzer ships in this module, first at v0.4.0; the version sits beside the
 other pins), which exits 3 on a `,omitempty` tag on a bool, where a
 `false` is lost on write; a deliberate case takes
-`//nolint:omitemptyscalar // reason` on the field.
+`//omitemptyscalar:ignore <reason>` on the field (the reason is required; golangci-lint
+warns "unknown linters" about the older `//nolint:omitemptyscalar` and no setting
+turns the warning off, so the marker is one golangci-lint does not read).
 repo-standard itself cannot pin its own unreleased tag, so its Makefile runs
 `go run ./cmd/omitemptyscalar ./...`; `tool-pin` accepts a local-path run only in a
 repo whose `go.mod` module line is `github.com/dkoosis/repo-standard`.

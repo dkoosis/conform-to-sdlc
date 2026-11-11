@@ -247,3 +247,17 @@ func TestScaffoldAuditGatesCheckSomething(t *testing.T) {
 		}
 	}
 }
+
+// TestScaffoldGoSumMatchesTheDSL: the checksums the scaffold writes are the
+// ones this module's own go.sum holds for the same dsl version.
+func TestScaffoldGoSumMatchesTheDSL(t *testing.T) {
+	data, err := os.ReadFile("../../go.sum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.SplitSeq(renderGoSum(ScaffoldSpec{}), "\n") {
+		if line != "" && !strings.Contains(string(data), line+"\n") {
+			t.Errorf("go.sum lacks the scaffold's line %q", line)
+		}
+	}
+}
