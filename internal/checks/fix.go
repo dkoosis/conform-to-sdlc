@@ -51,6 +51,9 @@ func Fix(dir string) ([]string, error) {
 // and exclusions are a person's, and lint-set names what it lacks.
 func fixGolangci(dir string) (string, error) {
 	path := filepath.Join(dir, golangciFile)
+	if golangciOtherName(dir) != "" {
+		return "", nil // the repo has a config under another name; lint-set names it
+	}
 	if _, err := os.Lstat(path); err == nil {
 		return "", nil
 	} else if !os.IsNotExist(err) {

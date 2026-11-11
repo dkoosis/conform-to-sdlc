@@ -295,6 +295,16 @@ func TestFix_Golangci(t *testing.T) {
 			wantWrote: true,
 		},
 		{
+			name: "present under another name",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				if err := os.WriteFile(filepath.Join(dir, ".golangci.yaml"), []byte("version: \"2\"\nlinters:\n  default: none\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantFinding: true,
+		},
+		{
 			name: "present",
 			setup: func(t *testing.T, dir string) {
 				t.Helper()
@@ -388,6 +398,20 @@ func TestLintSet_EverySettingCanBeKept(t *testing.T) {
 	for _, m := range found {
 		if !ids[m[1]] {
 			t.Errorf("setting %s is reported but a drop cannot name it", m[1])
+		}
+	}
+}
+
+// TestLintSet_ConfigUnderAnotherName: a repo whose golangci-lint config is
+// .golangci.yaml fails lint-set and names that file, even beside a canonical
+// .golangci.yml golangci-lint does not load.
+func TestLintSet_ConfigUnderAnotherName(t *testing.T) {
+	t.Parallel()
+	for _, other := range []string{".golangci.yaml", ".golangci.toml", ".golangci.json"} {
+		dir := writeRepo(t, map[string]string{".golangci.yml": checks.CanonicalGolangci, other: "version: \"2\"\n"})
+		got := checks.CheckLintSet(dir, values.Values{})
+		if len(got) != 1 || got[0].File != other || !strings.Contains(got[0].Repair, "rename "+other) {
+			t.Errorf("%s: findings = %+v, want one naming %s and its rename", other, got, other)
 		}
 	}
 }

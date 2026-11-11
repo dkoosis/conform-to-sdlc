@@ -25,6 +25,22 @@ var CanonicalGolangci string
 // golangciFile is the config every lint rule reads.
 const golangciFile = ".golangci.yml"
 
+// golangciOtherNames are the other names golangci-lint loads its config
+// from. A repo whose config has one of them runs that file, not the
+// .golangci.yml the lint rules read.
+var golangciOtherNames = []string{".golangci.yaml", ".golangci.toml", ".golangci.json"}
+
+// golangciOtherName returns the first of golangciOtherNames present in dir,
+// or "".
+func golangciOtherName(dir string) string {
+	for _, n := range golangciOtherNames {
+		if _, err := os.Lstat(filepath.Join(dir, n)); err == nil {
+			return n
+		}
+	}
+	return ""
+}
+
 // standardLinters is what golangci-lint v2's `default: standard` enables.
 var standardLinters = []string{"errcheck", "govet", "ineffassign", "staticcheck", "unused"}
 
@@ -250,6 +266,14 @@ func checkLintSet(dir string, vals values.Values) []Finding {
 	}
 	drops, findings := lintSetDrops(vals, canonOn)
 
+	if other := golangciOtherName(dir); other != "" {
+		return append(findings, Finding{
+			File:   other,
+			Rule:   RuleLintSet,
+			Msg:    "golangci-lint loads " + other + ", but the lint rules read " + golangciFile + " — the config that runs goes unchecked",
+			Repair: "rename " + other + " to " + golangciFile + " (convert it to YAML first if it is not), and keep one config file",
+		})
+	}
 	data, err := os.ReadFile(filepath.Join(dir, golangciFile))
 	if err != nil {
 		return append(findings, Finding{
