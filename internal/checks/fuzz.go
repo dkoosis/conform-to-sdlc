@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -29,8 +30,6 @@ type fuzzFunc struct {
 var (
 	// fuzzFlag captures the value of a -fuzz flag: -fuzz=^FuzzX$$, -fuzz '^FuzzX$$', -fuzz="^$$f$$".
 	fuzzFlag = regexp.MustCompile(`-fuzz(?:=|\s+)(?:'([^']*)'|"([^"]*)"|(\S+))`)
-	// fuzzList is the discovery form: go test -list '^Fuzz'.
-	fuzzList = regexp.MustCompile(`go\s+test\b[^\n;|&]*\s-list\b[^\n;|&]*Fuzz`)
 )
 
 // skipFuzzDir says whether the walk leaves a directory alone.
@@ -82,7 +81,7 @@ func fuzzFuncsIn(fset *token.FileSet, path, rel string) []fuzzFunc {
 
 // isFuzzFunc matches func FuzzXxx(f *testing.F) with no receiver.
 func isFuzzFunc(fn *ast.FuncDecl) bool {
-	if fn.Recv != nil || !strings.HasPrefix(fn.Name.Name, "Fuzz") || fn.Type.Params == nil || len(fn.Type.Params.List) != 1 {
+	if fn.Recv != nil || !strings.HasPrefix(fn.Name.Name, "Fuzz") || fn.Type.Params == nil || len(fn.Type.Params.List) != 1 || fn.Type.Results != nil {
 		return false
 	}
 	star, ok := fn.Type.Params.List[0].Type.(*ast.StarExpr)
@@ -101,28 +100,27 @@ func checkFuzzCoverage(dir string) []Finding {
 	if len(funcs) == 0 {
 		return nil
 	}
-	recipe, hasTarget, ok := fuzzRecipe(dir)
+	cmds, hasTarget, ok := fuzzRecipe(dir)
 	if !ok {
 		return nil
 	}
+	runs := fuzzRuns(cmds)
 
 	var why string
 	switch {
 	case !hasTarget:
 		why = "the Makefile has no fuzz target"
-	case !strings.Contains(recipe, "-fuzz"):
+	case len(runs.entries) == 0:
 		why = "the fuzz target runs no `go test -fuzz`"
-	case fuzzList.MatchString(recipe):
-		return nil // discovers every Fuzz function by construction
 	}
 	var findings []Finding
 	for _, f := range funcs {
-		if why == "" && fuzzNamed(recipe, f.name) {
+		if why == "" && runs.cover(f) {
 			continue
 		}
 		reason := why
 		if reason == "" {
-			reason = "the fuzz target never names it"
+			reason = "the fuzz target does not run it, by name or by listing its package"
 		}
 		findings = append(findings, Finding{
 			File: makefileFile,
@@ -135,12 +133,12 @@ func checkFuzzCoverage(dir string) []Finding {
 	return findings
 }
 
-// fuzzRecipe returns the text of the fuzz target's recipes and of every
-// target it lists as a prerequisite; ok is false when there is no Makefile.
-func fuzzRecipe(dir string) (recipe string, hasTarget, ok bool) {
+// fuzzRecipe returns the commands of the fuzz target and of every target it
+// lists as a prerequisite; ok is false when there is no Makefile.
+func fuzzRecipe(dir string) (cmds []string, hasTarget, ok bool) {
 	data, err := os.ReadFile(filepath.Join(dir, makefileFile))
 	if err != nil {
-		return "", false, false
+		return nil, false, false
 	}
 	byName := map[string]mkTarget{}
 	for _, t := range parseMakefile(string(data)) {
@@ -149,23 +147,26 @@ func fuzzRecipe(dir string) (recipe string, hasTarget, ok bool) {
 		}
 	}
 	if _, has := byName["fuzz"]; !has {
-		return "", false, true
+		return nil, false, true
 	}
 	recipes, _ := parseRecipes(string(data))
-	var body strings.Builder
 	for name := range reachable(byName, "fuzz") {
 		for _, c := range recipes[name] {
-			body.WriteString(blankComments(c.text))
-			body.WriteByte('\n')
+			cmds = append(cmds, blankComments(c.text))
 		}
 	}
-	return body.String(), true, true
+	return cmds, true, true
 }
 
-// blankComments drops a shell comment tail from each line of a command.
+// blankComments drops each shell comment from a command: a whole-line comment
+// (with or without a make @ - + prefix) and the tail after " #".
 func blankComments(s string) string {
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
+		if strings.HasPrefix(strings.TrimLeft(l, " \t@-+"), "#") {
+			lines[i] = ""
+			continue
+		}
 		if head, _, found := strings.Cut(l, " #"); found {
 			lines[i] = head
 		}
@@ -173,18 +174,128 @@ func blankComments(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// fuzzNamed says whether some -fuzz value in the recipe selects the function:
-// a plain name, or a regexp that matches it. A value that holds a variable
-// (the loop form `"^$$f$$"`) selects nothing by itself.
-func fuzzNamed(recipe, name string) bool {
-	for _, m := range fuzzFlag.FindAllStringSubmatch(recipe, -1) {
-		val := m[1] + m[2] + m[3]
-		val = strings.ReplaceAll(val, "$$", "$")
-		if strings.Contains(val, "$(") || strings.Contains(val, "${") || strings.Contains(strings.TrimSuffix(val, "$"), "$") {
+// fuzzEntry is one `go test -fuzz` command: the function names its value
+// selects (nil: any, as in the loop form's "^$$f$$") and the packages it runs.
+type fuzzEntry struct {
+	names *regexp.Regexp
+	pkgs  []fuzzPkg
+}
+
+// fuzzPkg is a package argument resolved to a directory from the repo root;
+// tree says it ended in /..., any says it was a variable (the loop's $$pkg).
+type fuzzPkg struct {
+	dir  string
+	tree bool
+	any  bool
+}
+
+type fuzzRunSet struct {
+	entries []fuzzEntry
+	scope   []fuzzPkg // packages the -list and go list commands cover
+}
+
+var (
+	goTestCmd = regexp.MustCompile(`\bgo\s+test\b`)
+	goListCmd = regexp.MustCompile(`\bgo\s+list\b`)
+	stmtSplit = regexp.MustCompile(`;|&&|\|\||\n`)
+)
+
+// fuzzRuns reads every go test -fuzz command, and the -list and go list
+// commands that discover which packages a loop runs.
+func fuzzRuns(cmds []string) fuzzRunSet {
+	var set fuzzRunSet
+	for _, c := range cmds {
+		cwd := "."
+		for _, piece := range stmtSplit.Split(c, -1) {
+			fields := strings.Fields(piece)
+			if len(fields) > 1 && strings.TrimLeft(fields[0], "@-+") == "cd" {
+				cwd = path.Join(cwd, strings.Trim(fields[1], `"'`))
+				continue
+			}
+			isTest := goTestCmd.MatchString(piece)
+			switch {
+			case isTest && strings.Contains(piece, "-fuzz"):
+				set.entries = append(set.entries, fuzzEntry{names: fuzzNames(piece), pkgs: pkgArgs(piece, cwd)})
+			case isTest && strings.Contains(piece, "-list"), goListCmd.MatchString(piece):
+				set.scope = append(set.scope, pkgArgs(piece, cwd)...)
+			}
+		}
+	}
+	return set
+}
+
+// fuzzNames returns the regexp a -fuzz value gives, or nil when the value
+// holds a variable.
+func fuzzNames(piece string) *regexp.Regexp {
+	m := fuzzFlag.FindStringSubmatch(piece)
+	if m == nil {
+		return nil
+	}
+	val := strings.ReplaceAll(m[1]+m[2]+m[3], "$$", "$")
+	if strings.Contains(strings.TrimSuffix(val, "$"), "$") {
+		return nil
+	}
+	re, err := regexp.Compile(val)
+	if err != nil {
+		return nil
+	}
+	return re
+}
+
+// pkgArgs lists the package arguments after `go test` or `go list`: tokens
+// that start with a dot or a variable. None means the current directory.
+func pkgArgs(piece, cwd string) []fuzzPkg {
+	loc := goTestCmd.FindStringIndex(piece)
+	if loc == nil {
+		loc = goListCmd.FindStringIndex(piece)
+	}
+	var pkgs []fuzzPkg
+	for tok := range strings.FieldsSeq(piece[loc[1]:]) {
+		switch {
+		case strings.HasPrefix(tok, "$"):
+			pkgs = append(pkgs, fuzzPkg{any: true})
+		case strings.HasPrefix(tok, "."):
+			pkgs = append(pkgs, fuzzPkg{dir: path.Join(cwd, strings.TrimSuffix(tok, "/...")), tree: strings.HasSuffix(tok, "/...")})
+		}
+	}
+	if len(pkgs) == 0 {
+		pkgs = []fuzzPkg{{dir: cwd}}
+	}
+	return pkgs
+}
+
+// cover says whether some go test -fuzz command runs the function: its name
+// matches and its packages (for a variable, the discovered ones) include the
+// function's directory.
+func (s fuzzRunSet) cover(f fuzzFunc) bool {
+	fdir := path.Dir(f.file)
+	for _, e := range s.entries {
+		if e.names != nil && !e.names.MatchString(f.name) {
 			continue
 		}
-		re, err := regexp.Compile(val)
-		if err == nil && re.MatchString(name) {
+		for _, p := range e.pkgs {
+			switch {
+			case p.any && len(s.scope) == 0:
+				return true
+			case p.any:
+				if pkgsInclude(s.scope, fdir) {
+					return true
+				}
+			case pkgsInclude([]fuzzPkg{p}, fdir):
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pkgsInclude says whether any package covers directory dir.
+func pkgsInclude(pkgs []fuzzPkg, dir string) bool {
+	for _, p := range pkgs {
+		switch {
+		case p.any, p.dir == dir:
+			return true
+		case p.tree && (p.dir == "." || strings.HasPrefix(dir+"/", p.dir+"/")):
 			return true
 		}
 	}

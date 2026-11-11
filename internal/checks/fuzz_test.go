@@ -83,7 +83,7 @@ func TestFuzzCoverage_NoSubprocess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(src), "exec.Command") {
+	if strings.Contains(string(src), "exec."+"Command") {
 		t.Error("fuzz.go starts a subprocess")
 	}
 }
@@ -99,5 +99,40 @@ func TestFuzzCoverage_NoFuzzTarget(t *testing.T) {
 	got := checks.CheckFuzzCoverage(dir)
 	if len(got) != 2 || !strings.Contains(got[0].Msg, "no fuzz target") {
 		t.Fatalf("want FuzzA and FuzzB unrun with no fuzz target, got %v", got)
+	}
+}
+
+func TestFuzzCoverage_ScopeAndComments(t *testing.T) {
+	t.Parallel()
+	pkgA := "package a\nimport \"testing\"\nfunc FuzzParse(f *testing.F) {}\n"
+	tests := map[string]string{"a/a_test.go": pkgA, "b/b_test.go": pkgA}
+
+	// The same name in two packages: running ./a does not run ./b.
+	got := fuzzRepo(t, "\tgo test -run '^$$' -fuzz '^FuzzParse$$' ./a\n", tests)
+	if len(got) != 1 || !strings.Contains(got[0].Msg, "b/b_test.go") {
+		t.Errorf("want only b/b_test.go unrun, got %v", got)
+	}
+	// ./... covers both; a cd into each package covers it.
+	if got := fuzzRepo(t, "\tgo test -fuzz '^FuzzParse$$' ./...\n", tests); len(got) != 0 {
+		t.Errorf("./... produced %v", got)
+	}
+	cd := "\tcd a && go test -fuzz '^FuzzParse$$' .\n\tcd b && go test -fuzz '^FuzzParse$$' .\n"
+	if got := fuzzRepo(t, cd, tests); len(got) != 0 {
+		t.Errorf("cd form produced %v", got)
+	}
+	// A list loop over one package leaves the other unrun.
+	loop := "\t@for f in $$(go test -list '^Fuzz' ./a | sed -n '/^Fuzz/p'); do go test -run '^$$' -fuzz \"^$$f$$\" ./a || exit 1; done\n"
+	if got := fuzzRepo(t, loop, tests); len(got) != 1 || !strings.Contains(got[0].Msg, "b/b_test.go") {
+		t.Errorf("single-package loop: want only b/b_test.go unrun, got %v", got)
+	}
+	// A commented-out fuzz line runs nothing.
+	got = fuzzRepo(t, "\t@echo skipping\n\t# go test -run '^$$' -fuzz '^FuzzParse$$' ./...\n", tests)
+	if len(got) != 2 || !strings.Contains(got[0].Msg, "runs no `go test -fuzz`") {
+		t.Errorf("commented fuzz line: want both unrun, got %v", got)
+	}
+	// A helper that returns a value is not a fuzz test.
+	helper := "package a\nimport \"testing\"\nfunc FuzzSetup(f *testing.F) error { return nil }\n"
+	if got := fuzzRepo(t, "\t@echo none\n", map[string]string{"a/h_test.go": helper}); len(got) != 0 {
+		t.Errorf("helper with a result produced %v", got)
 	}
 }
