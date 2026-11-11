@@ -196,7 +196,7 @@ func expandMakeVars(s string, vars map[string]makeVar) string {
 var (
 	deadcodeRun    = regexp.MustCompile(`\bdeadcode\b`)
 	deadcodeTest   = regexp.MustCompile(`\s--?test(?:=(?:true|1|t|T|TRUE|True))?(?:\s|$)`)
-	swallowTail    = regexp.MustCompile(`\|\|\s*(?:true\b|:(?:\s|;|$)|exit\s+0\b)`)
+	swallowTail    = regexp.MustCompile(`^\)?\s*\|\|\s*(?:true\b|:(?:\s|;|$)|exit\s+0\b)`)
 	deadcodeSkip   = regexp.MustCompile(`\bexit\s+0\b`)
 	outputFilter   = regexp.MustCompile("(?:^|[\\s|;&(`])(grep|egrep|fgrep|rg|sed|awk|cut|head|tail|tr|comm|uniq|sort|diff)(?:\\s|$)")
 	quietGrep      = regexp.MustCompile(`^\s+-\w*q`)
@@ -262,7 +262,7 @@ func deadcodeSwallowFindings(text, masked string) []Finding {
 	switch {
 	case strings.Contains(prefix, "-"):
 		why = "a leading - ignores the command's exit status"
-	case swallowTail.MatchString(masked[at:]):
+	case swallowTail.MatchString(masked[at+pipelineEnd(masked[at:]):]):
 		why = "`|| true`, `|| :` or `|| exit 0` swallows its failure"
 	case !deadcodeOutputTested(text, masked, at):
 		why = "its output is neither captured and tested (-n or -z) nor a negated pipeline (`! deadcode ... | grep .`); deadcode exits 0 when it finds dead code"

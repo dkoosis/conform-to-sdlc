@@ -336,17 +336,18 @@ func TestDeadcodeGate_CannotFail(t *testing.T) {
 		recipe string
 		fail   bool
 	}{
-		"scaffold form":                {"\t@out=$$(" + run + ") || { echo could not run; exit 1; }; if [ -n \"$$out\" ]; then echo \"$$out\"; exit 1; fi\n", false},
-		"test -z form":                 {"\t@out=$$(" + run + ") || exit 1; test -z \"$$out\"\n", false},
-		"piped to ! grep":              {"\t@! " + run + " | grep .\n", false},
-		"|| true":                      {"\t@out=$$(" + run + ") || true; if [ -n \"$$out\" ]; then exit 1; fi\n", true},
-		"|| :":                         {"\t@out=$$(" + run + ") || :; if [ -n \"$$out\" ]; then exit 1; fi\n", true},
-		"|| exit 0":                    {"\t@out=$$(" + run + ") || exit 0; if [ -n \"$$out\" ]; then exit 1; fi\n", true},
-		"dash prefix":                  {"\t-@out=$$(" + run + "); if [ -n \"$$out\" ]; then exit 1; fi\n", true},
-		"bare run, output untested":    {"\t@" + run + "\n", true},
-		"captured, never tested":       {"\t@out=$$(" + run + ") || exit 1; echo \"$$out\"\n", true},
-		"tests another variable":       {"\t@out=$$(" + run + ") || exit 1; if [ -n \"$$other\" ]; then exit 1; fi\n", true},
-		"bare with go run in the tail": {"\t@" + run + " | head -5\n", true},
+		"scaffold form":                         {"\t@out=$$(" + run + ") || { echo could not run; exit 1; }; if [ -n \"$$out\" ]; then echo \"$$out\"; exit 1; fi\n", false},
+		"test -z form":                          {"\t@out=$$(" + run + ") || exit 1; test -z \"$$out\"\n", false},
+		"piped to ! grep":                       {"\t@! " + run + " | grep .\n", false},
+		"|| true":                               {"\t@out=$$(" + run + ") || true; if [ -n \"$$out\" ]; then exit 1; fi\n", true},
+		"|| :":                                  {"\t@out=$$(" + run + ") || :; if [ -n \"$$out\" ]; then exit 1; fi\n", true},
+		"|| true on a later grep, not deadcode": {"\t@out=$$(" + run + ") || exit 1; out=$$(echo \"$$out\" | grep -v x || true); if [ -n \"$$out\" ]; then exit 1; fi\n", false},
+		"|| exit 0":                             {"\t@out=$$(" + run + ") || exit 0; if [ -n \"$$out\" ]; then exit 1; fi\n", true},
+		"dash prefix":                           {"\t-@out=$$(" + run + "); if [ -n \"$$out\" ]; then exit 1; fi\n", true},
+		"bare run, output untested":             {"\t@" + run + "\n", true},
+		"captured, never tested":                {"\t@out=$$(" + run + ") || exit 1; echo \"$$out\"\n", true},
+		"tests another variable":                {"\t@out=$$(" + run + ") || exit 1; if [ -n \"$$other\" ]; then exit 1; fi\n", true},
+		"bare with go run in the tail":          {"\t@" + run + " | head -5\n", true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
