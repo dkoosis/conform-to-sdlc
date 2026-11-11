@@ -64,7 +64,7 @@ func fixGolangci(dir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("write %s: %w", golangciFile, err)
 	}
-	if _, err := f.WriteString(CanonicalGolangci); err != nil {
+	if _, err := f.WriteString(canonicalGolangciFor(dir)); err != nil {
 		_ = f.Close()       // the write error is the one returned
 		_ = os.Remove(path) // leave no half-written config behind
 		return "", fmt.Errorf("write %s: %w", golangciFile, err)
@@ -87,7 +87,11 @@ func fixLintPack(dir string) (string, error) {
 	if !created {
 		return "", nil
 	}
-	return fmt.Sprintf(`created %s — the lintbrush rules pack repo-standard ships; enable gocritic's ruleguard check in .golangci.yml with rules: "${base-path}/.golangci-rules/bugclasses.go,${base-path}/.golangci-rules/modern.go"`, lintpack.Dir), nil
+	rules := "${base-path}/.golangci-rules/bugclasses.go,${base-path}/.golangci-rules/modern.go"
+	if lintpack.UsesAtomicfile(dir) {
+		rules += ",${base-path}/" + lintpack.Dir + "/" + rawStateWriteFile // this repo requires atomicfile: rule 2 must run
+	}
+	return fmt.Sprintf(`created %s — the lintbrush rules pack repo-standard ships; enable gocritic's ruleguard check in .golangci.yml with rules: %q`, lintpack.Dir, rules), nil
 }
 
 // fixReadme writes a README.md skeleton when the repo root carries none.

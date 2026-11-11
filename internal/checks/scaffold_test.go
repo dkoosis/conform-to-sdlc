@@ -233,6 +233,9 @@ func TestScaffoldAuditGatesCheckSomething(t *testing.T) {
 		"-fuzztime=$(FUZZTIME) ",
 		"jscpd@$(JSCPD_VER) --threshold 3 --ignore '**/.git/**,**/.beads/**,**/.sandbox/**' .",
 		"nilaway@$(NILAWAY_VER) -include-pkgs=$$(go list -m) ./...",
+		"\nOMITEMPTYSCALAR_VER := v0.4.0\n",
+		"go run github.com/dkoosis/repo-standard/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./...",
+		"audit: check race fuzz dupe nilcheck deadcode omitempty vuln ",
 	} {
 		if !strings.Contains(mk, want) {
 			t.Errorf("scaffolded Makefile lacks %q", want)

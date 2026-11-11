@@ -1,5 +1,5 @@
 # bugclasses pack — golangci-lint v2 wiring (decision nug d7ea466a8172).
-# Merge these blocks into a repo's .golangci.yml. Covers 5 of the 6 rules;
+# Merge these blocks into a repo's .golangci.yml. Covers 6 of the 7 rules;
 # rule 3 (omitempty-scalar) is a standalone analyzer — see README §rule 3.
 #
 # RULE → surface:
@@ -8,8 +8,11 @@
 #   4 err-substring     → gocritic/ruleguard  (on)
 #   5 context-in-daemon → forbidigo           (PATH-SCOPED per repo — see below)
 #   6 pid-liveness      → gocritic/ruleguard  (on)
+#   7 exec-no-wait-delay → gocritic/ruleguard (on)
 #
 # PREREQUISITES in the consuming repo:
+#   0. The strict floor also sets errcheck check-blank: true (golangci.baseline.yml),
+#      with the _test.go exclusion that keeps blank-discard to non-test code.
 #   1. Copy the pack's *.go rule files into .golangci-rules/ (rules.go →
 #      bugclasses.go; keep optin_rawstatewrite.go alongside if adopting rule 2).
 #   2. Make the ruleguard DSL importable so gocritic can typecheck the rules
@@ -19,11 +22,9 @@
 #         import _ "github.com/quasilyte/go-ruleguard/dsl"
 #      (Never compiled into your binary; the tag keeps it out of normal builds.)
 #   3. Guard against pack drift. The copy in step 1 rots when upstream fixes a
-#      rule. Vendor check-pack-drift.sh from the pack and run it in CI after
-#      golangci-lint — it compares your copy's //pack:version + content hash
-#      against upstream and fails on a mismatch (network-soft):
-#         .golangci-rules/check-pack-drift.sh .golangci-rules/bugclasses.go
-#      Override upstream with PACK_UPSTREAM_URL (e.g. pin to a tag, not main).
+#      rule. repo-standard embeds this pack and its lint-pack rule fails `make
+#      check` when your copy differs by one byte; `repo-standard pack sync`
+#      rewrites it. Do not vendor a drift script.
 
 version: "2"
 

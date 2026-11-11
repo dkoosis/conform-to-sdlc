@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -38,19 +39,62 @@ type File struct {
 	Source   string // name in lintbrush gorules/
 	Repo     string // name in .golangci-rules/; empty for files a repo does not hold
 	Required bool
+	// WithAtomicfile makes the file required in a repo that requires
+	// dkoosis/atomicfile: rule 2 (raw writes of durable state) is the rule
+	// that repo adopted the library for.
+	WithAtomicfile bool
+}
+
+// Wanted says whether a repo must hold the file: every Required file, and the
+// atomicfile-gated one when the repo requires atomicfile.
+func (f File) Wanted(usesAtomicfile bool) bool {
+	return f.Required || (f.WithAtomicfile && usesAtomicfile)
 }
 
 // Members lists the pack. rules.go is named bugclasses.go in the repos.
-// optin_rawstatewrite.go is opt-in (rule 2): a repo may leave it out, and
-// when it holds it, it must match. The two YAML files are the golangci wiring a
+// optin_rawstatewrite.go is opt-in (rule 2) for a repo that does not use
+// dkoosis/atomicfile: it may leave the file out, and when it holds it, it must
+// match. A repo that requires atomicfile must hold it (see UsesAtomicfile). The two YAML files are the golangci wiring a
 // repo merges into its .golangci.yml; repos do not keep them in
 // .golangci-rules/.
 var Members = []File{
 	{Source: "rules.go", Repo: "bugclasses.go", Required: true},
 	{Source: "modern.go", Repo: "modern.go", Required: true},
-	{Source: "optin_rawstatewrite.go", Repo: "optin_rawstatewrite.go"},
+	{Source: "optin_rawstatewrite.go", Repo: "optin_rawstatewrite.go", WithAtomicfile: true},
 	{Source: "golangci.snippet.yml"},
 	{Source: "golangci.baseline.yml"},
+}
+
+// AtomicfileModule is the module path of dkoosis/atomicfile.
+const AtomicfileModule = "github.com/dkoosis/atomicfile"
+
+var (
+	// atomicfileRequire matches a requirement line in go.mod, in a block or as
+	// a `require` line.
+	atomicfileRequire = regexp.MustCompile(`(?m)^[ \t]*(?:require[ \t]+)?` + regexp.QuoteMeta(AtomicfileModule) + `[ \t]+v.*$`)
+	// atomicfileModuleLine matches the go.mod of atomicfile itself.
+	atomicfileModuleLine = regexp.MustCompile(`(?m)^module\s+` + regexp.QuoteMeta(AtomicfileModule) + `\s*$`)
+)
+
+// UsesAtomicfile says whether the repo in dir has a go.mod that requires
+// dkoosis/atomicfile directly. The atomicfile repo itself, which declares that
+// module path, is the implementation and is exempt: it holds the raw writes the
+// rule flags, on purpose. A missing or unreadable go.mod is not a use.
+func UsesAtomicfile(dir string) bool {
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return false
+	}
+	if atomicfileModuleLine.Match(data) {
+		return false
+	}
+	for _, line := range atomicfileRequire.FindAll(data, -1) {
+		// An `// indirect` requirement is not a call by this repo.
+		if !bytes.Contains(line, []byte("// indirect")) {
+			return true
+		}
+	}
+	return false
 }
 
 // Bytes returns the embedded content of the pack file named source, as named
@@ -103,7 +147,8 @@ func ReadSource() (Source, error) {
 
 // Sync writes the pack into dir/.golangci-rules, overwriting drift. It writes
 // every required file, and an opt-in file only when the repo already holds it,
-// so syncing never turns an opt-in rule on. Files repo-standard does not own
+// so syncing never turns an opt-in rule on; a repo that requires atomicfile
+// gets rule 2's file too, since it must hold it. Files repo-standard does not own
 // are left alone. It reports the repo names it changed.
 func Sync(dir string) ([]string, error) {
 	target := filepath.Join(dir, Dir)
@@ -111,13 +156,14 @@ func Sync(dir string) ([]string, error) {
 		return nil, fmt.Errorf("create %s: %w", Dir, err)
 	}
 	var changed []string
+	needsOptIn := UsesAtomicfile(dir)
 	for _, m := range Members {
 		if m.Repo == "" {
 			continue
 		}
 		dest := filepath.Join(target, m.Repo)
 		have, err := os.ReadFile(dest)
-		if !m.Required && err != nil {
+		if err != nil && !m.Wanted(needsOptIn) {
 			continue
 		}
 		want, err := Bytes(m.Source)
@@ -135,7 +181,8 @@ func Sync(dir string) ([]string, error) {
 	return changed, nil
 }
 
-// Create writes the required pack files into dir/.golangci-rules only when
+// Create writes the required pack files (and rule 2's file for a repo that
+// requires atomicfile) into dir/.golangci-rules only when
 // that path does not exist at all. It builds the directory beside the target
 // and renames it into place, so a failed write leaves nothing behind. It
 // reports whether it wrote.
@@ -150,8 +197,9 @@ func Create(dir string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("create a staging directory for %s: %w", Dir, err)
 	}
+	needsOptIn := UsesAtomicfile(dir)
 	for _, m := range Members {
-		if !m.Required {
+		if !m.Wanted(needsOptIn) {
 			continue
 		}
 		body, err := Bytes(m.Source)

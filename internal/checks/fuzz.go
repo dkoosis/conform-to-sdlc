@@ -42,7 +42,7 @@ func skipFuzzDir(name string) bool {
 func findFuzzFuncs(dir string) []fuzzFunc {
 	var found []fuzzFunc
 	fset := token.NewFileSet()
-	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error { //nolint:errcheck // the callback returns nil or SkipDir, so WalkDir has no error to report
 		switch {
 		case err != nil:
 			return nil //nolint:nilerr // an unreadable entry is skipped, not a finding
@@ -51,7 +51,7 @@ func findFuzzFuncs(dir string) []fuzzFunc {
 		case d.IsDir() || !strings.HasSuffix(d.Name(), "_test.go"):
 			return nil
 		}
-		rel, _ := filepath.Rel(dir, path)
+		rel, _ := filepath.Rel(dir, path) //nolint:errcheck // path came from walking dir, so it is under dir
 		found = append(found, fuzzFuncsIn(fset, path, filepath.ToSlash(rel))...)
 		return nil
 	})

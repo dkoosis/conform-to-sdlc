@@ -1,6 +1,6 @@
 # repo-standard Makefile — strict QA gates, fleet pattern (reference: ~/Projects/ferret).
 #
-# Primary: check (vet+lint+test+build) | audit (check+race+fuzz+dupe+nilcheck+deadcode+vuln)
+# Primary: check (vet+lint+test+build) | audit (check+race+fuzz+dupe+nilcheck+deadcode+omitempty+vuln)
 
 .DEFAULT_GOAL := check
 
@@ -12,7 +12,7 @@ SHELL := /bin/bash
 include .sandbox/lib/Makefile.doctor.mk
 include .sandbox/lib/Makefile.cross.mk
 
-.PHONY: help check audit vet lint test race fuzz build vuln dupe nilcheck deadcode install deploy clean pack-refresh
+.PHONY: help check audit vet lint test race fuzz build vuln dupe nilcheck deadcode omitempty install deploy clean pack-refresh
 
 # Serialize golangci-lint through the machine-global mkdir mutex (see script
 # header — golangci-lint's cache lock fails exit-3 on contention instead of
@@ -38,7 +38,7 @@ help: ## Show this help
 check: vet lint test build standard ## Fast validation: vet + lint + test + build + repo-standard on itself
 	@echo "=== check pass ==="
 
-audit: check race fuzz dupe nilcheck deadcode vuln ## Exhaustive validation
+audit: check race fuzz dupe nilcheck deadcode omitempty vuln ## Exhaustive validation
 	@echo "=== audit pass ==="
 
 vet: ## Run go vet
@@ -98,6 +98,14 @@ DEADCODE_VER ?= v0.52.0
 deadcode: ## Fail on any function unreachable from main (deadcode)
 	@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/repo-standard) || { echo "deadcode: could not run"; exit 1; }; \
 	if [ -n "$$out" ]; then echo "$$out"; echo "deadcode: the functions above are unreachable; cut them"; exit 1; fi
+
+# omitemptyscalar exits 3 on a ,omitempty tag on a bool (a false that is lost on
+# write). Other repos run it as go run github.com/dkoosis/repo-standard/cmd/
+# omitemptyscalar@$(OMITEMPTYSCALAR_VER); this repo cannot pin its own
+# unreleased tag, so it runs the tree it is checking (tool-pin allows that here
+# only, by the go.mod module line).
+omitempty: ## Fail on a bool field tagged omitempty (omitemptyscalar, from this tree)
+	go run ./cmd/omitemptyscalar ./...
 
 ## doctor target provided by .sandbox/lib/Makefile.doctor.mk (project.conf-driven)
 ## cross / cross-amd64 / cross-arm64 provided by .sandbox/lib/Makefile.cross.mk

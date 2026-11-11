@@ -1,6 +1,7 @@
 package values_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/dkoosis/repo-standard/internal/values"
@@ -23,8 +24,16 @@ func TestDefaultFleet(t *testing.T) {
 		t.Error("fleet roster does not contain ferret")
 	}
 
-	if _, ok := byName["repo-standard"]; !ok {
-		t.Error("fleet roster does not contain repo-standard")
+	// The fleet of epic cfm-pxx: exactly these, in this order. repo-standard
+	// gates itself through make check, not through the --fleet roster; sdlc,
+	// a2a-cli and local-review are outside the Go contract.
+	want := []string{"canapay", "mnemd", "loto", "ferret", "atomicfile", "beadwatch", "bill-cli", "fo", "itzy", "keyring", "snipe", "strand", "trixi", "upcheck"}
+	got := make([]string, 0, len(fleet.Repos))
+	for _, repo := range fleet.Repos {
+		got = append(got, repo.Name)
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("fleet roster = %v, want exactly %v", got, want)
 	}
 
 	if _, ok := byName["cc-plugins"]; ok {
@@ -52,7 +61,7 @@ func TestDefaultFleet(t *testing.T) {
 		}
 	}
 
-	const wantPublic, wantPrivate = 8, 3
+	const wantPublic, wantPrivate = 8, 6
 	if publicCount != wantPublic {
 		t.Errorf("public repo count = %d, want %d", publicCount, wantPublic)
 	}

@@ -75,6 +75,13 @@ func TestMakefile_Violations(t *testing.T) {
 			wantMsg:  "audit does not reach deadcode",
 		},
 		{
+			name:     "audit skips omitempty",
+			makefile: strings.Replace(goodMakefile, " omitempty", "", 1),
+			profile:  values.ProfileTool,
+			wantRule: checks.RuleMakefileVerb,
+			wantMsg:  "audit does not reach omitempty",
+		},
+		{
 			name:     "audit skips vuln",
 			makefile: strings.Replace(goodMakefile, " vuln ##", " ##", 1),
 			profile:  values.ProfileTool,

@@ -107,6 +107,7 @@ linters:
       ignore-package-globs:
         - github.com/dkoosis/repo-standard/*
     errcheck:
+      check-blank: true
       exclude-functions:
         - (io.Closer).Close
         - (*os.File).Close
@@ -225,6 +226,12 @@ linters:
       - linters:
           - unparam
         path: _test\.go
+      # check-blank covers production code only (lintbrush baseline entry).
+      - path: _test\.go$
+        linters:
+          - errcheck
+        text: Error return value
+        source: '(^|[^A-Za-z0-9_.])_\s*(,\s*[A-Za-z0-9_]+\s*)*(:=|=[^=])|,\s*_\s*(:=|=[^=])'
       # cmd main.go + its extracted per-command files (ferret-3yt split): relax complexity
       - linters:
           - cyclop

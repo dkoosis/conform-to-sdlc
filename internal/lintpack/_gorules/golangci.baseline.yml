@@ -54,6 +54,11 @@ linters:
 
   settings:
     errcheck:
+      # Blank-discards fail too: `x, _ := f()` and `_ = f()` (20 fixes in 6
+      # repos since 2026-08-04: canapay, sdlc, loto, strand, mnemd, trixi).
+      # A deliberate discard names itself: //nolint:errcheck // reason.
+      # Test files are exempt (see exclusions below): production bugs are the aim.
+      check-blank: true
       # STRICT. exclude-functions lists only calls whose dropped error is
       # genuinely fine — never a path/package blanket. Extend per-repo ONLY
       # for the same shape (a Close on a read-only handle, a printer to a
@@ -74,3 +79,13 @@ linters:
 
   exclusions:
     generated: lax
+    rules:
+      # check-blank applies to non-test code only. A blank assignment (`x, _ := f()`,
+      # `_ = g()`) in a _test.go file is not reported; a bare unchecked `g()` in a
+      # test still is. The source regex matches a `_` on the left of `:=` or `=` anywhere
+      # in the line, so `t.Cleanup(func() { _ = f() })` is exempt too.
+      - path: _test\.go$
+        linters:
+          - errcheck
+        text: Error return value
+        source: '(^|[^A-Za-z0-9_.])_\s*(,\s*[A-Za-z0-9_]+\s*)*(:=|=[^=])|,\s*_\s*(:=|=[^=])'

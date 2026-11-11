@@ -12,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/dkoosis/repo-standard/internal/lintpack"
 	"github.com/dkoosis/repo-standard/internal/values"
 )
 
@@ -21,6 +22,17 @@ import (
 //
 //go:embed golangci.canonical.yml
 var CanonicalGolangci string
+
+// canonicalGolangciFor is the canonical config for the repo in dir: for a repo
+// that requires dkoosis/atomicfile, its ruleguard rules also name the
+// raw-state-write file, which lint-pack requires of it.
+func canonicalGolangciFor(dir string) string {
+	if !lintpack.UsesAtomicfile(dir) {
+		return CanonicalGolangci
+	}
+	const modern = "${base-path}/" + lintpack.Dir + "/modern.go"
+	return strings.Replace(CanonicalGolangci, modern, modern+",${base-path}/"+lintpack.Dir+"/"+rawStateWriteFile, 1)
+}
 
 // golangciFile is the config every lint rule reads.
 const golangciFile = ".golangci.yml"
@@ -53,6 +65,7 @@ type lintSetConfig struct {
 		Disable  []string `yaml:"disable"`
 		Settings struct {
 			Errcheck struct {
+				CheckBlank       bool     `yaml:"check-blank"`
 				ExcludeFunctions []string `yaml:"exclude-functions"`
 			} `yaml:"errcheck"`
 			Nolintlint struct {
@@ -354,6 +367,7 @@ var settingIDs = map[string]bool{
 	"nolintlint.require-explanation":     true,
 	"nolintlint.require-specific":        true,
 	"nolintlint.allow-unused":            true,
+	"errcheck.check-blank":               true,
 	"errcheck.exclude-functions":         true,
 	"gocritic.enabled-checks":            true,
 	"gocritic.settings.ruleguard.rules":  true,
@@ -398,6 +412,10 @@ func weakNolintlint(cfg lintSetConfig) []weakSetting {
 
 func weakErrcheck(cfg, canon lintSetConfig) []weakSetting {
 	allowed := toSet(canon.Linters.Settings.Errcheck.ExcludeFunctions)
+	var out []weakSetting
+	if !cfg.Linters.Settings.Errcheck.CheckBlank {
+		out = append(out, weak("linters.settings.errcheck.check-blank", "is not true — a blank-discarded error (x, _ := f(), _ = f()) passes", "set linters.settings.errcheck.check-blank: true, and copy the _test.go exclusion from lintbrush gorules/golangci.baseline.yml so tests stay exempt"))
+	}
 	var extra []string
 	for _, f := range cfg.Linters.Settings.Errcheck.ExcludeFunctions {
 		if !allowed[f] {
@@ -405,9 +423,9 @@ func weakErrcheck(cfg, canon lintSetConfig) []weakSetting {
 		}
 	}
 	if len(extra) == 0 {
-		return nil
+		return out
 	}
-	return []weakSetting{weak("linters.settings.errcheck.exclude-functions", "lets errors drop from "+strings.Join(extra, ", ")+" — beyond the canonical list of calls whose error is harmless", "remove from exclude-functions: "+strings.Join(extra, ", ")+" (check the error, or //nolint:errcheck the one call with its reason)")}
+	return append(out, weak("linters.settings.errcheck.exclude-functions", "lets errors drop from "+strings.Join(extra, ", ")+" — beyond the canonical list of calls whose error is harmless", "remove from exclude-functions: "+strings.Join(extra, ", ")+" (check the error, or //nolint:errcheck the one call with its reason)"))
 }
 
 func weakRuleguard(cfg lintSetConfig) []weakSetting {

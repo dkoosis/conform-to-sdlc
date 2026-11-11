@@ -15,7 +15,7 @@ const goodMakefile = `.DEFAULT_GOAL := check
 GOLANGCILINT := bash scripts/lint-locked
 
 check: vet lint test build standard ## Fast validation: vet + lint + test + build, then repo-standard
-audit: check race fuzz dupe nilcheck deadcode vuln ## Exhaustive validation
+audit: check race fuzz dupe nilcheck deadcode omitempty vuln ## Exhaustive validation
 deploy: build ## Install locally
 help: ## Show this help
 vet: ## Run go vet
@@ -28,6 +28,7 @@ fuzz: ## Fuzz
 dupe: ## Duplication
 nilcheck: ## nilaway
 deadcode: ## Unreachable functions
+omitempty: ## bool omitempty
 standard: ## Run repo-standard
 clean: ## Remove build outputs
 install: ## Install into GOBIN
