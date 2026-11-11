@@ -65,14 +65,14 @@ func workflowRunsAuditOnSchedule(path string) bool {
 // through: no condition, one that never tests the event (a repository check,
 // always()), or one that names the schedule event without negating it.
 func reachesSchedule(cond string) bool {
-	cond = strings.TrimSpace(cond)
+	flat := strings.NewReplacer(" ", "", "\"", "'", "${{", "", "}}", "").Replace(cond)
 	switch {
-	case cond == "" || !strings.Contains(cond, "event_name"):
+	case flat == "" || !strings.Contains(flat, "event_name"):
 		return true
-	case strings.Contains(cond, "!= 'schedule'") || strings.Contains(cond, `!= "schedule"`):
-		return false
+	case strings.Contains(flat, "!='schedule'") || strings.Contains(flat, "!(") || strings.HasPrefix(flat, "!"):
+		return false // negated: != 'schedule', !(…), !contains(…)
 	}
-	return strings.Contains(cond, "'schedule'") || strings.Contains(cond, `"schedule"`)
+	return strings.Contains(flat, "'schedule'")
 }
 
 // hasCron says whether the `on:` node carries a schedule with a cron entry.

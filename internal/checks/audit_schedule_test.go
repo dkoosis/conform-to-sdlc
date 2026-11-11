@@ -30,6 +30,8 @@ func TestAuditSchedule_Fails(t *testing.T) {
 		"audit step skipped on schedule": {"audit.yml": "name: a\non:\n  schedule:\n    - cron: '1 2 * * *'\n  push:\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: make audit\n        if: github.event_name == 'push'\n"},
 		"step guarded off the schedule":  {"audit.yml": strings.Replace(goodAuditYML, "      - run: make audit\n", "      - run: make audit\n        if: github.event_name != 'schedule'\n", 1)},
 		"job guarded off the schedule":   {"audit.yml": strings.Replace(goodAuditYML, "    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    if: github.event_name != 'schedule'\n", 1)},
+		"unspaced negation":              {"audit.yml": strings.Replace(goodAuditYML, "      - run: make audit\n", "      - run: make audit\n        if: github.event_name!='schedule'\n", 1)},
+		"negated equality":               {"audit.yml": strings.Replace(goodAuditYML, "      - run: make audit\n", "      - run: make audit\n        if: \"!(github.event_name == 'schedule')\"\n", 1)},
 		"a different target":             {"audit.yml": strings.Replace(goodAuditYML, "make audit", "make check-audit", 1)},
 		"schedule with no cron":          {"audit.yml": "name: a\non:\n  schedule: []\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: make audit\n"},
 	}
