@@ -368,6 +368,56 @@ func TestDeadcodeGate_CannotFail(t *testing.T) {
 	}
 }
 
+func TestDeadcodeFilter_AFilterAnywhereInTheRecipe(t *testing.T) {
+	t.Parallel()
+	const capture = "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x); "
+	const again = "out=$$(printf '%s\\n' \"$$out\" | grep -vE "
+	const tail = " || true); test -z \"$$out\"\n"
+	tests := map[string]struct {
+		recipe string
+		vars   string
+		vals   values.Values
+		want   string // substring of the one deadcode-filter finding; "" = pass
+	}{
+		"second-step grep, no exception":    {capture + again + `'hookA|hookB'` + tail, "", values.Values{}, "has no deadcode-filter exception"},
+		"second-step grep, unanchored":      {capture + again + `'hookA|hookB'` + tail, "", allow("hookA", "hookB"), "not just names"},
+		"second-step grep, anchored group":  {capture + again + `'unreachable func: (hookA|hookB)$$'` + tail, "", allow("hookA", "hookB"), ""},
+		"pattern in a variable, anchored":   {capture + again + "$(HOOK_PAT)" + tail, "HOOK_PAT := 'unreachable func: hookA$$'\n", allow("hookA"), ""},
+		"pattern in a variable, unanchored": {capture + again + "$(HOOK_PAT)" + tail, "HOOK_PAT := 'hookA'\n", allow("hookA"), "not just names"},
+		"pattern in a computed variable":    {capture + again + "$(HOOK_PAT)" + tail, "HOOK_PAT := $(foreach h,a b,x$(h))\n", allow("hookA"), "not just names"},
+		"--invert-match spelling":           {capture + "out=$$(printf '%s\\n' \"$$out\" | grep --invert-match hookA); test -z \"$$out\"\n", "", values.Values{}, "has no deadcode-filter exception"},
+		"-Ev spelling":                      {capture + "out=$$(printf '%s\\n' \"$$out\" | grep -Ev hookA); test -z \"$$out\"\n", "", values.Values{}, "has no deadcode-filter exception"},
+		"sed after the capture":             {capture + "out=$$(printf '%s\\n' \"$$out\" | sed '/hookA/d'); test -z \"$$out\"\n", "", values.Values{}, "sed filters"},
+		"display pipe after the gate":       {capture + "if [ -n \"$$out\" ]; then echo \"$$out\" | head -50; exit 1; fi\n", "", values.Values{}, ""},
+		"quiet grep after the gate":         {capture + "if echo \"$$out\" | grep -q .; then exit 1; fi\n", "", values.Values{}, ""},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := writeRepo(t, map[string]string{
+				"Makefile":      withRecipe("deadcode", tc.recipe) + tc.vars,
+				"x.go":          "package x\n",
+				"cmd/x/main.go": "package main\n\nfunc main() {}\n",
+			})
+			var got []checks.Finding
+			for _, f := range checks.CheckDeadcodeGate(dir, tc.vals) {
+				if f.Rule == checks.RuleDeadcodeFilter {
+					got = append(got, f)
+				}
+			}
+			if tc.want == "" {
+				if len(got) != 0 {
+					t.Fatalf("want none, got %v", got)
+				}
+				return
+			}
+			if len(got) == 0 || !strings.Contains(got[0].Msg, tc.want) {
+				t.Fatalf("want a finding containing %q, got %v", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestDeadcodeGate_TestFlagSpellings(t *testing.T) {
 	t.Parallel()
 	const run = "go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) "

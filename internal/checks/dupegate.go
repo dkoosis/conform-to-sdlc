@@ -193,6 +193,32 @@ func expandMakeVars(s string, vars map[string]makeVar) string {
 	return s
 }
 
+// expandSimpleVars resolves a make variable whose value holds no further
+// $-expression (a flag, a version, a pattern; $$ is a literal $). A computed
+// one ($(foreach ...)) stays a reference and reaches the verifier unresolved,
+// which fails it.
+func expandSimpleVars(s string, vars map[string]makeVar) string {
+	for range 5 {
+		next := makeVarRef.ReplaceAllStringFunc(s, func(ref string) string {
+			if v, ok := vars[strings.Trim(ref, "$(){}")]; ok && !strings.Contains(strings.ReplaceAll(v.value, "$$", ""), "$") {
+				return v.value
+			}
+			return ref
+		})
+		if next == s {
+			break
+		}
+		s = next
+	}
+	return s
+}
+
+// maskVarRefs blanks each make variable reference to underscores of the same
+// length, so the ) of $(NAME) does not end a command.
+func maskVarRefs(s string) string {
+	return makeVarRef.ReplaceAllStringFunc(s, func(ref string) string { return strings.Repeat("_", len(ref)) })
+}
+
 var (
 	deadcodeRun    = regexp.MustCompile(`\bdeadcode\b`)
 	deadcodeTest   = regexp.MustCompile(`\s--?test(?:=(?:true|1|t|T|TRUE|True))?(?:\s|$)`)
@@ -218,13 +244,14 @@ var (
 // from the gate. It is allowed only for functions an exception names, with a
 // reason each: {"rule": "deadcode-filter", "allow": {"<function>": "<why>"}}.
 func checkDeadcodeGate(dir string, vals values.Values) []Finding {
-	cmds, _ := gateRecipes(dir, "deadcode")
+	cmds, vars := gateRecipes(dir, "deadcode")
 	// Each command is masked on its own, so a quote left open in one (an
 	// apostrophe in a comment) cannot pair with a quote in the next.
 	var sb, masked strings.Builder
 	var swallowed []Finding
 	for _, c := range cmds {
-		m := maskQuotes(c.text)
+		c.text = expandSimpleVars(c.text, vars)
+		m := maskVarRefs(maskQuotes(c.text))
 		if deadcodeRun.MatchString(m) {
 			swallowed = append(swallowed, deadcodeSwallowFindings(c.text, m)...)
 			sb.WriteString(c.text + "\n")
@@ -464,22 +491,38 @@ func pipelineEnd(blank string) int {
 // a ;, &&, ||, &, a newline, or the ) that closes the command substitution
 // holding deadcode, so a later display pipe (echo "$out" | head) is not a
 // filter.
+//
+// Anywhere after the deadcode run, a grep that inverts (-v, -vE, -Ev,
+// --invert-match), a sed or an awk is a filter on its output too: a recipe
+// that captures the output and filters it in a second step (out=$(printf
+// "$out" | grep -v ...)) hides functions the same way.
 func deadcodeFilters(text, blank string) (patterns, other []string) {
 	covered := 0
-	for _, run := range deadcodeRun.FindAllStringIndex(blank, -1) {
+	seen := map[int]bool{}
+	runs := deadcodeRun.FindAllStringIndex(blank, -1)
+	for _, run := range runs {
 		if run[0] < covered {
 			continue
 		}
 		covered = run[0] + pipelineEnd(blank[run[0]:])
-		p, o := stageFilters(text, blank, run[0], covered)
+		p, o := stageFilters(text, blank, run[0], covered, false, seen)
+		patterns = append(patterns, p...)
+		other = append(other, o...)
+	}
+	if len(runs) > 0 {
+		p, o := stageFilters(text, blank, runs[0][0], len(blank), true, seen)
 		patterns = append(patterns, p...)
 		other = append(other, o...)
 	}
 	return patterns, other
 }
 
-// stageFilters reads the filter stages in blank[start:stop].
-func stageFilters(text, blank string, start, stop int) (patterns, other []string) {
+var invertGrep = regexp.MustCompile(`(?:^|\s)(?:-[a-zA-Z]*v[a-zA-Z]*|--invert-match)(?:\s|$)`)
+
+// stageFilters reads the filter stages in blank[start:stop]. With filterOnly,
+// only a stage that always filters counts: an inverting grep, sed or awk.
+// seen holds the stage offsets already read.
+func stageFilters(text, blank string, start, stop int, filterOnly bool, seen map[int]bool) (patterns, other []string) {
 	scope := blank[:stop]
 	for _, m := range outputFilter.FindAllStringSubmatchIndex(scope[start:], -1) {
 		tool := blank[start+m[2] : start+m[3]]
@@ -488,6 +531,17 @@ func stageFilters(text, blank string, start, stop int) (patterns, other []string
 		if loc := filterSegEnd.FindStringIndex(blank[from:]); loc != nil {
 			end = from + loc[0]
 		}
+		if seen[from] {
+			continue
+		}
+		if filterOnly {
+			always := tool == "sed" || tool == "awk" ||
+				((tool == "grep" || tool == "egrep" || tool == "fgrep") && invertGrep.MatchString(blank[from:end]))
+			if !always {
+				continue
+			}
+		}
+		seen[from] = true
 		switch tool {
 		case "grep", "egrep", "fgrep":
 			patterns = append(patterns, grepPatterns(tool, text[from:end], blank[from:end])...)
