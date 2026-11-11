@@ -131,6 +131,17 @@ func ruleguardDSLFindings(dir string) []Finding {
 	}}
 }
 
+// skipDSLDir says whether importsDSL passes over a subdirectory: a hidden,
+// underscore, vendor or testdata directory, or a nested module, whose imports
+// do not satisfy the root go.mod.
+func skipDSLDir(path, name string) bool {
+	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || slices.Contains(sourceSkipDirs, name) {
+		return true
+	}
+	_, err := os.Stat(filepath.Join(path, "go.mod"))
+	return err == nil
+}
+
 // importsDSL says whether a Go file outside hidden directories, vendor and
 // testdata imports the ruleguard dsl (a tools.go with `import _ "..."`).
 func importsDSL(dir string) bool {
@@ -140,13 +151,8 @@ func importsDSL(dir string) bool {
 			return filepath.SkipDir
 		}
 		if d.IsDir() {
-			if path != dir && (strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_") || slices.Contains(sourceSkipDirs, d.Name())) {
+			if path != dir && skipDSLDir(path, d.Name()) {
 				return filepath.SkipDir
-			}
-			if path != dir {
-				if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
-					return filepath.SkipDir // a nested module does not satisfy this go.mod
-				}
 			}
 			return nil
 		}
