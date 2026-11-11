@@ -1,15 +1,18 @@
 {
   "repos": [
-    {"name": "ferret", "visibility": "public"},
-    {"name": "snipe", "visibility": "public"},
     {"name": "canapay", "visibility": "private"},
-    {"name": "fo", "visibility": "public"},
+    {"name": "mnemd", "visibility": "private"},
     {"name": "loto", "visibility": "public"},
-    {"name": "strand", "visibility": "public"},
-    {"name": "npharvester", "visibility": "private"},
+    {"name": "ferret", "visibility": "public"},
     {"name": "atomicfile", "visibility": "public"},
+    {"name": "beadwatch", "visibility": "public"},
+    {"name": "bill-cli", "visibility": "private"},
+    {"name": "fo", "visibility": "public"},
+    {"name": "itzy", "visibility": "private"},
     {"name": "keyring", "visibility": "private"},
-    {"name": "next", "visibility": "public"},
-    {"name": "repo-standard", "visibility": "public"}
+    {"name": "snipe", "visibility": "public"},
+    {"name": "strand", "visibility": "public"},
+    {"name": "trixi", "visibility": "private"},
+    {"name": "upcheck", "visibility": "public"}
   ]
 }

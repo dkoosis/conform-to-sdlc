@@ -45,7 +45,7 @@ func checkLintPin(dir string) []Finding {
 func strayPinFindings(dir string) []Finding {
 	candidates := []string{makefileFile, "tools.go"}
 	for _, glob := range []string{".github/workflows/*.yml", ".github/workflows/*.yaml", "scripts/*"} {
-		matches, _ := filepath.Glob(filepath.Join(dir, glob))
+		matches, _ := filepath.Glob(filepath.Join(dir, glob)) //nolint:errcheck // Glob errs only on a malformed pattern; these are constant
 		for _, m := range matches {
 			rel, err := filepath.Rel(dir, m)
 			if err != nil {

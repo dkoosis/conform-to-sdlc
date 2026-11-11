@@ -46,10 +46,41 @@ Non-goals:
   state and the North Star live; a rule here that asks a repo for another copy
   is deleted.
 
+## Rules the audit and lint standard adds
+
+Every finding names the file, the rule id and the repair. These ids are the
+ones a repo meets when it adopts the standard; `docs/repo-standard.json` excepts
+a rule by id with a reason.
+
+`make audit` runs `check`, then seven gates, each a pinned tool that fails the
+target: race, fuzz, dupe, nilcheck, deadcode, omitempty and vuln. A gate that
+skips when its tool is absent, or runs a tool with no pinned version, fails
+the repo. `omitempty` runs `omitemptyscalar` (version in `OMITEMPTYSCALAR_VER`
+beside the other pins), which exits 3 on a `,omitempty` tag on a bool, where a
+`false` is lost on write; a deliberate case takes
+`//nolint:omitemptyscalar // reason` on the field.
+
+| rule | fails a Go repo when | repair |
+|---|---|---|
+| `makefile-verbs` | `audit` does not reach race, fuzz, dupe, nilcheck, deadcode, omitempty and vuln | add the target and list it in `audit`'s prerequisites; `--fix` scaffolds a new Makefile with all of them |
+| `gate-skip` | a check or audit step exits 0 when its tool is missing | delete the presence test, or make the missing branch `exit 1` |
+| `tool-pin` | a gate tool runs from PATH, at `@latest`, or at an unset version | `go run <pkg>@$(TOOL_VER)` or `npx tool@$(TOOL_VER)`, with the version set |
+| `fuzz-coverage` | a `Fuzz*` function is not run by the fuzz target | make the target run every Fuzz function |
+| `ci-audit-schedule` | no workflow runs `make audit` on a schedule | add a scheduled workflow; `--fix` writes one |
+| `lint-pack` | `.golangci-rules/` differs by one byte from the embedded pack, or a repo requiring `github.com/dkoosis/atomicfile` lacks `optin_rawstatewrite.go` or does not list it in gocritic's ruleguard `rules` | `repo-standard pack sync`; then append the file to `rules` |
+| `lint-set` | a canonical linter is off, or a setting is weakened, including errcheck without `check-blank: true` | the finding's repair; `check-blank` is on for non-test code and exempt in `_test.go` files by the `exclusions.rules` entry the lintbrush baseline ships |
+
+The raw-write rule (pack rule 2, `optin_rawstatewrite.go`) turns on by
+dependency: a `go.mod` that requires `github.com/dkoosis/atomicfile` directly
+(an `// indirect` line does not count) must carry the file and name it. The
+atomicfile repo is exempt: its `go.mod` declares that module path, so it is the
+implementation, and it holds the raw writes the rule flags.
+
 ## Canonical linter set
 
 `lint-set` fails a repo whose `.golangci.yml` does not enable each linter below,
-or weakens one of these settings: nolintlint's `require-explanation` and
+or weakens one of these settings: errcheck's `check-blank: true` (a blank-discarded
+`x, _ := f()` fails; test files are exempt), nolintlint's `require-explanation` and
 `require-specific` (and no `allow-unused`), errcheck's `exclude-functions`
 beyond the canonical list, gocritic's ruleguard wiring of the lintbrush pack
 (`bugclasses.go` and `modern.go`, `failOn: dsl`), and forbidigo's

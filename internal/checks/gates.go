@@ -21,7 +21,7 @@ import (
 // gateTools is repo-specific and out of the rules.
 
 // gateTools are the tools the rules know by name.
-var gateTools = []string{"govulncheck", "nilaway", "jscpd", "deadcode", "go-arch-lint", "staticcheck"}
+var gateTools = []string{"govulncheck", "nilaway", "jscpd", "deadcode", "go-arch-lint", "staticcheck", "omitemptyscalar"}
 
 var (
 	toolAlt = strings.Join(gateTools, "|")

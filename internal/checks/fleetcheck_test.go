@@ -35,7 +35,7 @@ func conformingRepoResponses(full string) map[string]string {
 // allFleetResponses maps every roster repo to the same canned answers.
 func allFleetResponses(shape func(full string) map[string]string) map[string]string {
 	responses := map[string]string{}
-	for _, name := range []string{"ferret", "snipe", "canapay", "fo", "loto", "strand", "npharvester", "atomicfile", "keyring", "next", "repo-standard"} {
+	for _, name := range []string{"canapay", "mnemd", "loto", "ferret", "atomicfile", "beadwatch", "bill-cli", "fo", "itzy", "keyring", "snipe", "strand", "trixi", "upcheck"} {
 		maps.Copy(responses, shape("dkoosis/"+name))
 	}
 	return responses

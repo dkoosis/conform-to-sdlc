@@ -3,6 +3,7 @@ package checks_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -272,4 +273,136 @@ func snapshot(t *testing.T, dir string) string {
 		t.Fatal(err)
 	}
 	return b.String()
+}
+
+// TestLintPack_Atomicfile: a repo whose go.mod requires dkoosis/atomicfile must
+// hold the raw-state-write rule file byte-equal and name it in its ruleguard
+// rules glob; a repo without atomicfile, and atomicfile itself, are left alone.
+func TestLintPack_Atomicfile(t *testing.T) {
+	t.Parallel()
+
+	const (
+		optin   = lintpack.Dir + "/optin_rawstatewrite.go"
+		rulesIn = ",${base-path}/.golangci-rules/modern.go"
+		direct  = "module example.com/app\n\ngo 1.26\n\nrequire github.com/dkoosis/atomicfile v0.3.1\n"
+	)
+	withOptin := func(t *testing.T, f map[string]string) {
+		t.Helper()
+		f[optin] = packBytes(t, "optin_rawstatewrite.go")
+	}
+	withGlob := func(f map[string]string) {
+		f[".golangci.yml"] = strings.Replace(f[".golangci.yml"], rulesIn, rulesIn+",${base-path}/"+optin, 1)
+	}
+	tests := []struct {
+		name    string
+		gomod   string
+		edit    func(t *testing.T, f map[string]string)
+		want    []string // substrings, one finding each; nil = passes
+		wantRep string
+	}{
+		{
+			name:  "requires atomicfile, file and glob in place",
+			gomod: direct,
+			edit:  func(t *testing.T, f map[string]string) { t.Helper(); withOptin(t, f); withGlob(f) },
+		},
+		{
+			name:  "requires atomicfile in a block",
+			gomod: "module example.com/app\n\nrequire (\n\tgithub.com/dkoosis/atomicfile v0.3.1\n\tgopkg.in/yaml.v3 v3.0.1\n)\n",
+			edit:  func(t *testing.T, f map[string]string) { t.Helper(); withOptin(t, f); withGlob(f) },
+		},
+		{
+			name:    "requires atomicfile, file missing and glob missing",
+			gomod:   direct,
+			edit:    func(*testing.T, map[string]string) {},
+			want:    []string{optin, "ruleguard.rules does not name"},
+			wantRep: "ruleguard",
+		},
+		{
+			name:    "requires atomicfile, file present but not in the glob",
+			gomod:   direct,
+			edit:    withOptin,
+			want:    []string{"ruleguard.rules does not name " + optin},
+			wantRep: "append",
+		},
+		{
+			name:  "requires atomicfile, file one byte off",
+			gomod: direct,
+			edit: func(t *testing.T, f map[string]string) {
+				t.Helper()
+				f[optin] = oneByteOff(packBytes(t, "optin_rawstatewrite.go"))
+				withGlob(f)
+			},
+			want:    []string{"differs from lintbrush gorules/optin_rawstatewrite.go"},
+			wantRep: "pack sync",
+		},
+		{
+			name:  "no atomicfile: silent without the file",
+			gomod: "module example.com/app\n\ngo 1.26\n",
+			edit:  func(*testing.T, map[string]string) {},
+		},
+		{
+			name:  "no go.mod: silent",
+			gomod: "",
+			edit:  func(*testing.T, map[string]string) {},
+		},
+		{
+			name:  "atomicfile only as an indirect requirement: silent",
+			gomod: "module example.com/app\n\nrequire github.com/dkoosis/atomicfile v0.3.1 // indirect\n",
+			edit:  func(*testing.T, map[string]string) {},
+		},
+		{
+			name:  "the atomicfile repo itself is exempt",
+			gomod: "module github.com/dkoosis/atomicfile\n\ngo 1.26\n\nrequire github.com/dkoosis/atomicfile v0.0.0 // self reference in a fixture\n",
+			edit:  func(*testing.T, map[string]string) {},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			files := goodRepo()
+			if tt.gomod != "" {
+				files["go.mod"] = tt.gomod
+			}
+			tt.edit(t, files)
+			got := checks.CheckLintPack(writeRepo(t, files))
+			if len(got) != len(tt.want) {
+				t.Fatalf("lint-pack findings = %+v, want %d matching %q", got, len(tt.want), tt.want)
+			}
+			for _, w := range tt.want {
+				if !slices.ContainsFunc(got, func(f checks.Finding) bool {
+					return f.Rule == checks.RuleLintPack && strings.Contains(f.File+" "+f.Msg, w) && strings.Contains(f.Repair, tt.wantRep)
+				}) {
+					t.Errorf("no lint-pack finding with a repair naming %q matches %q in %+v", tt.wantRep, w, got)
+				}
+			}
+		})
+	}
+}
+
+// TestSync_Atomicfile: pack sync writes the raw-state-write file into a repo
+// that requires atomicfile, and leaves it out of one that does not.
+func TestSync_Atomicfile(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, gomod string
+		want        bool
+	}{
+		{"requires atomicfile", "module example.com/app\n\nrequire github.com/dkoosis/atomicfile v0.3.1\n", true},
+		{"does not", "module example.com/app\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(tc.gomod), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := lintpack.Sync(dir); err != nil {
+				t.Fatal(err)
+			}
+			_, err := os.Stat(filepath.Join(dir, lintpack.Dir, "optin_rawstatewrite.go"))
+			if got := err == nil; got != tc.want {
+				t.Errorf("optin_rawstatewrite.go written = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }

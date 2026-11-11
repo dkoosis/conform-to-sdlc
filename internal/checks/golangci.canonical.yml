@@ -103,6 +103,9 @@ linters:
       # A default clause marks the remaining enum cases as handled on purpose.
       default-signifies-exhaustive: true
     errcheck:
+      # A blank-discarded error (`x, _ := f()`, `_ = f()`) fails too; lint-set
+      # fails a repo that leaves this off. Test files are exempt below.
+      check-blank: true
       # Only calls whose dropped error is harmless. lint-set fails a repo that
       # excludes any other function.
       exclude-functions:
@@ -211,6 +214,14 @@ linters:
           - gocyclo
           - nestif
         path: _test\.go
+      # check-blank covers production code only: a blank assignment in a test
+      # is not reported, a bare unchecked call in a test still is. Same entry
+      # as lintbrush gorules/golangci.baseline.yml.
+      - path: _test\.go$
+        linters:
+          - errcheck
+        text: Error return value
+        source: '(^|[^A-Za-z0-9_.])_\s*(,\s*[A-Za-z0-9_]+\s*)*(:=|=[^=])|,\s*_\s*(:=|=[^=])'
       # A command's main.go wires flags and subcommands.
       - linters:
           - cyclop

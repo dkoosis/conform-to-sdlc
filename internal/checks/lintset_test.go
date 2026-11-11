@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/dkoosis/repo-standard/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/lintpack"
 	"github.com/dkoosis/repo-standard/internal/values"
 )
 
@@ -108,6 +109,25 @@ func TestLintSet(t *testing.T) {
 			name:    "errcheck excludes a call beyond the canonical list",
 			golangc: strings.Replace(checks.CanonicalGolangci, "        - fmt.Fprintln\n", "        - fmt.Fprintln\n        - (*database/sql.Rows).Close\n", 1),
 			want:    []string{"(*database/sql.Rows).Close"},
+		},
+		{
+			name:    "errcheck leaves check-blank unset",
+			golangc: strings.Replace(checks.CanonicalGolangci, "      check-blank: true\n", "", 1),
+			want:    []string{"set linters.settings.errcheck.check-blank: true"},
+		},
+		{
+			name:    "errcheck sets check-blank false",
+			golangc: strings.Replace(checks.CanonicalGolangci, "check-blank: true", "check-blank: false", 1),
+			want:    []string{"linters.settings.errcheck.check-blank"},
+		},
+		{
+			name:    "check-blank unset but kept with its reason",
+			golangc: strings.Replace(checks.CanonicalGolangci, "      check-blank: true\n", "", 1),
+			values:  `{"profile": "tool", "exceptions": [{"rule": "lint-set", "drop": {"errcheck.check-blank": "a generated client discards by design"}}]}`,
+		},
+		{
+			name:    "check-blank with the test-file exclusion from the lintbrush baseline passes",
+			golangc: withExclusionRule(t, "      - path: _test\\.go$\n        linters:\n          - errcheck\n        text: Error return value\n        source: '(^|[^A-Za-z0-9_.])_\\s*(:=|=[^=])'\n"),
 		},
 		{
 			name:    "ruleguard rules lack modern.go",
@@ -413,5 +433,25 @@ func TestLintSet_ConfigUnderAnotherName(t *testing.T) {
 		if len(got) != 1 || got[0].File != other || !strings.Contains(got[0].Repair, "rename "+other) {
 			t.Errorf("%s: findings = %+v, want one naming %s and its rename", other, got, other)
 		}
+	}
+}
+
+// TestCanonicalGolangciExemptsBlankDiscardInTests: the canonical config sets
+// check-blank and carries the _test.go exclusion lintbrush's baseline ships,
+// so --fix writes a config whose tests are exempt and lint-set accepts it.
+func TestCanonicalGolangciExemptsBlankDiscardInTests(t *testing.T) {
+	t.Parallel()
+	for _, want := range []string{"check-blank: true", `path: _test\.go$`, "text: Error return value"} {
+		if !strings.Contains(checks.CanonicalGolangci, want) {
+			t.Errorf("canonical config lacks %q", want)
+		}
+	}
+	base, err := lintpack.Bytes("golangci.baseline.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	re := regexp.MustCompile(`(?m)^ +source: .*$`)
+	if got, want := re.FindString(checks.CanonicalGolangci), re.FindString(string(base)); got == "" || got != want {
+		t.Errorf("canonical source filter %q differs from the embedded baseline's %q", got, want)
 	}
 }

@@ -1,6 +1,6 @@
 name: audit
 
-# The slow gates (race, fuzz, dupe, nilcheck, deadcode, vuln), nightly and on
+# The slow gates (race, fuzz, dupe, nilcheck, deadcode, omitempty, vuln), nightly and on
 # demand. repo-standard's ci-audit-schedule rule needs a cron here and a
 # step that runs make audit.
 on:

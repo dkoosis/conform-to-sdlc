@@ -12,7 +12,7 @@ import (
 )
 
 // Nightly audit (cfm-9uq, epic cfm-pxx R5): the slow gates (race, fuzz, dupe,
-// nilcheck, deadcode, vuln) run in CI on a schedule, so they run when nobody
+// nilcheck, deadcode, omitempty, vuln) run in CI on a schedule, so they run when nobody
 // remembers to. The rule reads every workflow under .github/workflows.
 
 // auditWorkflowFile is the workflow the scaffold and --fix write for it.
@@ -25,14 +25,14 @@ var makeAudit = regexp.MustCompile(`(?m)^[^#\n]*\bmake\b[^#\n;&|]*\saudit(?:[\s;
 // a schedule: a schedule trigger with a cron entry, and a step running make
 // audit that the schedule event does not skip with an if.
 func checkCIAuditSchedule(dir string) []Finding {
-	paths, _ := filepath.Glob(filepath.Join(dir, ".github", "workflows", "*.y*ml"))
+	paths, _ := filepath.Glob(filepath.Join(dir, ".github", "workflows", "*.y*ml")) //nolint:errcheck // Glob errs only on a malformed pattern; this one is constant
 	if slices.ContainsFunc(paths, workflowRunsAuditOnSchedule) {
 		return nil
 	}
 	return []Finding{{
 		File:   filepath.ToSlash(filepath.Join(".github", "workflows")),
 		Rule:   RuleCIAuditSchedule,
-		Msg:    "no workflow runs `make audit` on a schedule — race, fuzz, dupe, nilcheck, deadcode and vuln run only when someone remembers to",
+		Msg:    "no workflow runs `make audit` on a schedule — race, fuzz, dupe, nilcheck, deadcode, omitempty and vuln run only when someone remembers to",
 		Repair: "add " + auditWorkflowFile + " with `on: schedule: - cron: '41 7 * * *'` and a step running `make audit` (repo-standard --fix writes one when the repo has none)",
 	}}
 }
@@ -129,7 +129,7 @@ func renderAuditWorkflow(ScaffoldSpec) string {
 
 const auditWorkflowTmpl = `name: audit
 
-# The slow gates (race, fuzz, dupe, nilcheck, deadcode, vuln), nightly and on
+# The slow gates (race, fuzz, dupe, nilcheck, deadcode, omitempty, vuln), nightly and on
 # demand. repo-standard's ci-audit-schedule rule needs a cron here and a
 # step that runs make audit.
 on:
