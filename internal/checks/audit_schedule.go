@@ -19,7 +19,7 @@ import (
 const auditWorkflowFile = ".github/workflows/audit.yml"
 
 // makeAudit finds a `make audit` command (make's own flags may sit between) on a run line that is not a comment.
-var makeAudit = regexp.MustCompile(`(?m)^[^#\n]*\bmake\b[^#\n;&|]*\baudit\b`)
+var makeAudit = regexp.MustCompile(`(?m)^[^#\n]*\bmake\b[^#\n;&|]*\saudit(?:[\s;&|]|$)`)
 
 // checkCIAuditSchedule fails a repo no workflow of which runs `make audit` on
 // a schedule: a schedule trigger with a cron entry, and a step running make
@@ -49,16 +49,30 @@ func workflowRunsAuditOnSchedule(path string) bool {
 		return false
 	}
 	for _, job := range wf.Jobs {
-		if job.If != "" && !strings.Contains(job.If, "schedule") {
+		if !reachesSchedule(job.If) {
 			continue
 		}
 		for _, step := range job.Steps {
-			if makeAudit.MatchString(step.Run) && (step.If == "" || strings.Contains(step.If, "schedule")) {
+			if makeAudit.MatchString(step.Run) && reachesSchedule(step.If) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// reachesSchedule says whether a job or step `if` lets the schedule event
+// through: no condition, one that never tests the event (a repository check,
+// always()), or one that names the schedule event without negating it.
+func reachesSchedule(cond string) bool {
+	cond = strings.TrimSpace(cond)
+	switch {
+	case cond == "" || !strings.Contains(cond, "event_name"):
+		return true
+	case strings.Contains(cond, "!= 'schedule'") || strings.Contains(cond, `!= "schedule"`):
+		return false
+	}
+	return strings.Contains(cond, "'schedule'") || strings.Contains(cond, `"schedule"`)
 }
 
 // hasCron says whether the `on:` node carries a schedule with a cron entry.
