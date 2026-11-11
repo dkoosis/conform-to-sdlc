@@ -81,8 +81,8 @@ func TestGateSkip_Passes(t *testing.T) {
 // no unpinned run.
 func TestOmitemptyGate_Rules(t *testing.T) {
 	t.Parallel()
-	const pinned = "\tGOPRIVATE='github.com/dkoosis/*' go run github.com/dkoosis/lintbrush/gorules/omitemptyscalar/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./...\n"
-	if got := gateFindings(t, "OMITEMPTYSCALAR_VER := v0.1.0\n"+withRecipe("omitempty", pinned), ""); len(got) != 0 {
+	const pinned = "\tgo run github.com/dkoosis/repo-standard/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./...\n"
+	if got := gateFindings(t, "OMITEMPTYSCALAR_VER := v0.4.0\n"+withRecipe("omitempty", pinned), ""); len(got) != 0 {
 		t.Errorf("pinned omitempty gate produced %v", got)
 	}
 	skip := "\t@command -v omitemptyscalar >/dev/null || echo skipped\n"
@@ -104,8 +104,8 @@ func TestToolPin_Fails(t *testing.T) {
 		{"npx no version", "dupe", "\tnpx --yes jscpd --threshold 3 .\n", "", "", "npx with no version"},
 		{"version var latest", "vuln", "\tgo run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VER) ./...\n", "GOVULNCHECK_VER := latest\n", "", `"latest" at Makefile line`},
 		{"omitempty bare on PATH", "omitempty", "\tomitemptyscalar ./...\n", "", "", "runs from PATH"},
-		{"omitempty @latest", "omitempty", "\tGOPRIVATE='github.com/dkoosis/*' go run github.com/dkoosis/lintbrush/gorules/omitemptyscalar/cmd/omitemptyscalar@latest ./...\n", "", "", "@latest"},
-		{"omitempty version unset", "omitempty", "\tgo run github.com/dkoosis/lintbrush/gorules/omitemptyscalar/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./...\n", "", "", "add OMITEMPTYSCALAR_VER="},
+		{"omitempty @latest", "omitempty", "\tgo run github.com/dkoosis/repo-standard/cmd/omitemptyscalar@latest ./...\n", "", "", "@latest"},
+		{"omitempty version unset", "omitempty", "\tgo run github.com/dkoosis/repo-standard/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./...\n", "", "", "add OMITEMPTYSCALAR_VER="},
 		{"version missing from project.conf", "nilcheck", "\tgo run go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VER) ./...\n", "", "JSCPD_VER=5.1.2\n", "add NILAWAY_VER="},
 	}
 	for _, tc := range tests {
@@ -174,5 +174,36 @@ func TestToolPin_VersionMakeCannotSee(t *testing.T) {
 	got := gateFindings(t, mk, projectConfPins)
 	if len(got) != 1 || got[0].Rule != checks.RuleToolPin || !strings.Contains(got[0].Msg, "make sees it empty") {
 		t.Fatalf("want one tool-pin about the empty version, got %v", got)
+	}
+}
+
+// TestToolPin_LocalRun: a gate tool run from a local path runs at no fixed
+// version, so tool-pin fails it, except in repo-standard itself, whose go.mod
+// module line says it cannot pin its own unreleased tag.
+func TestToolPin_LocalRun(t *testing.T) {
+	t.Parallel()
+	mk := withRecipe("omitempty", "\tgo run ./cmd/omitemptyscalar ./...\n")
+	for _, tc := range []struct {
+		name, gomod string
+		want        int
+	}{
+		{"another repo", "module example.com/app\n", 1},
+		{"no go.mod", "", 1},
+		{"repo-standard itself", "module github.com/dkoosis/repo-standard\n\ngo 1.26\n", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			files := map[string]string{"Makefile": mk}
+			if tc.gomod != "" {
+				files["go.mod"] = tc.gomod
+			}
+			got := checks.CheckGateSteps(writeRepo(t, files))
+			if len(got) != tc.want {
+				t.Fatalf("findings = %v, want %d", got, tc.want)
+			}
+			if tc.want == 1 && (got[0].Rule != checks.RuleToolPin || !strings.Contains(got[0].Msg, "local path") || got[0].Repair == "") {
+				t.Errorf("want a tool-pin naming the local path with a repair, got %+v", got[0])
+			}
+		})
 	}
 }

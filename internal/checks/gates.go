@@ -206,6 +206,7 @@ func checkGateSteps(dir string) []Finding {
 		conf = hidden
 	}
 	reached := reachable(byName, "check", "audit")
+	self := isRepoStandard(dir)
 
 	var names []string
 	for name := range recipes {
@@ -220,6 +221,7 @@ func checkGateSteps(dir string) []Finding {
 		var perCmd []Finding
 		for _, cmd := range recipes[name] {
 			perCmd = append(perCmd, skipFindings(name, cmd)...)
+			perCmd = append(perCmd, localRunFindings(name, cmd, self)...)
 			perCmd = append(perCmd, pinFindings(name, cmd, vars, confFor(cmd, conf, hidden), hidden)...)
 		}
 		findings = append(findings, dedupe(perCmd)...)
@@ -440,6 +442,45 @@ func statements(text string) []statement {
 		}
 	}
 	return append(out, statement{from, text[from:]})
+}
+
+// localToolRun matches `go run` of a gate tool from a local path, such as
+// `go run ./cmd/omitemptyscalar`: it runs whatever the working tree holds, at
+// no fixed version.
+var localToolRun = regexp.MustCompile(`\bgo\s+run\s+(?:-\S+\s+)*\.{1,2}/\S*?(` + toolAlt + `)(?:\s|$)`)
+
+// repoStandardModule is the module path of this checker's own repo.
+const repoStandardModule = "github.com/dkoosis/repo-standard"
+
+var repoStandardModuleLine = regexp.MustCompile(`(?m)^module\s+` + regexp.QuoteMeta(repoStandardModule) + `\s*$`)
+
+// isRepoStandard says whether the repo in dir is repo-standard itself, by the
+// module line of its go.mod.
+func isRepoStandard(dir string) bool {
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	return err == nil && repoStandardModuleLine.Match(data)
+}
+
+// localRunFindings flags a gate tool run from a local path (tool-pin). Only
+// repo-standard itself may: it cannot pin its own unreleased tag, so its
+// Makefile runs the tool from the tree it is checking.
+func localRunFindings(target string, cmd recipeCmd, self bool) []Finding {
+	if self {
+		return nil
+	}
+	var findings []Finding
+	text := blankQuotes(cmd.text)
+	for _, m := range localToolRun.FindAllStringSubmatchIndex(text, -1) {
+		tool := text[m[2]:m[3]]
+		findings = append(findings, Finding{
+			File: makefileFile,
+			Rule: RuleToolPin,
+			Msg:  fmt.Sprintf("target %q, line %d: %s runs from a local path, at whatever the tree holds, not a fixed version", target, cmd.lineAt(m[0]), tool),
+			Repair: fmt.Sprintf("run %s at a fixed version: go run <pkg>@$(%s_VER), with %s_VER set in the Makefile or .sandbox/project.conf",
+				tool, verKey(tool), verKey(tool)),
+		})
+	}
+	return findings
 }
 
 // pinFindings flags a known tool that runs at no fixed version.

@@ -233,8 +233,8 @@ func TestScaffoldAuditGatesCheckSomething(t *testing.T) {
 		"-fuzztime=$(FUZZTIME) ",
 		"jscpd@$(JSCPD_VER) --threshold 3 --ignore '**/.git/**,**/.beads/**,**/.sandbox/**' .",
 		"nilaway@$(NILAWAY_VER) -include-pkgs=$$(go list -m) ./...",
-		"\nOMITEMPTYSCALAR_VER := v0.1.0\n",
-		"GOPRIVATE='github.com/dkoosis/*' go run github.com/dkoosis/lintbrush/gorules/omitemptyscalar/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./...",
+		"\nOMITEMPTYSCALAR_VER := v0.4.0\n",
+		"go run github.com/dkoosis/repo-standard/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./...",
 		"audit: check race fuzz dupe nilcheck deadcode omitempty vuln ",
 	} {
 		if !strings.Contains(mk, want) {

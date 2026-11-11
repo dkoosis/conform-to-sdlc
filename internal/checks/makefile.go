@@ -38,8 +38,8 @@ var (
 		// -include-pkgs keeps nilaway's reports to code the repo can fix, not its dependencies.
 		{name: "nilcheck", alt: "nilaway", doc: "Run nilaway on this module's packages", recipe: "go run go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VER) -include-pkgs=$$(go list -m) ./..."},
 		{name: "deadcode", doc: "Fail on any function unreachable from main", recipe: `go list -f '{{.Name}}' ./... | grep -qx main || { echo "deadcode: no main package, nothing to trace"; exit 0; }; out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./...) || { echo "deadcode: could not run"; exit 1; }; if [ -n "$$out" ]; then echo "$$out"; exit 1; fi`},
-		// omitemptyscalar exits 3 on a ,omitempty tag on a bool; GOPRIVATE lets go fetch the private lintbrush module.
-		{name: "omitempty", doc: "Fail on a bool field tagged omitempty (omitemptyscalar)", recipe: "GOPRIVATE='github.com/dkoosis/*' go run github.com/dkoosis/lintbrush/gorules/omitemptyscalar/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./..."},
+		// omitemptyscalar exits 3 on a ,omitempty tag on a bool. It ships in this module, first at v0.4.0.
+		{name: "omitempty", doc: "Fail on a bool field tagged omitempty (omitemptyscalar)", recipe: "go run github.com/dkoosis/repo-standard/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./..."},
 		{name: "vuln", doc: "Scan for known vulnerabilities", recipe: "go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VER) ./..."},
 	}
 
@@ -50,7 +50,7 @@ var (
 		{"GOVULNCHECK_VER", "v1.9.0"},
 		{"DEADCODE_VER", "v0.52.0"},
 		{"JSCPD_VER", "5.1.2"},
-		{"OMITEMPTYSCALAR_VER", "v0.1.0"},
+		{"OMITEMPTYSCALAR_VER", "v0.4.0"},
 	}
 
 	// toolTargets extend the floor for the tool profile only: a lib has no

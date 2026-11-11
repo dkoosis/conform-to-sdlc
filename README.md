@@ -55,10 +55,14 @@ a rule by id with a reason.
 `make audit` runs `check`, then seven gates, each a pinned tool that fails the
 target: race, fuzz, dupe, nilcheck, deadcode, omitempty and vuln. A gate that
 skips when its tool is absent, or runs a tool with no pinned version, fails
-the repo. `omitempty` runs `omitemptyscalar` (version in `OMITEMPTYSCALAR_VER`
-beside the other pins), which exits 3 on a `,omitempty` tag on a bool, where a
+the repo. `omitempty` runs `go run github.com/dkoosis/repo-standard/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./...`
+(the analyzer ships in this module, first at v0.4.0; the version sits beside the
+other pins), which exits 3 on a `,omitempty` tag on a bool, where a
 `false` is lost on write; a deliberate case takes
 `//nolint:omitemptyscalar // reason` on the field.
+repo-standard itself cannot pin its own unreleased tag, so its Makefile runs
+`go run ./cmd/omitemptyscalar ./...`; `tool-pin` accepts a local-path run only in a
+repo whose `go.mod` module line is `github.com/dkoosis/repo-standard`.
 
 | rule | fails a Go repo when | repair |
 |---|---|---|

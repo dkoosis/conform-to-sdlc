@@ -100,10 +100,12 @@ deadcode: ## Fail on any function unreachable from main (deadcode)
 	if [ -n "$$out" ]; then echo "$$out"; echo "deadcode: the functions above are unreachable; cut them"; exit 1; fi
 
 # omitemptyscalar exits 3 on a ,omitempty tag on a bool (a false that is lost on
-# write). GOPRIVATE lets go fetch the private lintbrush module.
-OMITEMPTYSCALAR_VER ?= v0.1.0
-omitempty: ## Fail on a bool field tagged omitempty (omitemptyscalar, pinned)
-	GOPRIVATE='github.com/dkoosis/*' go run github.com/dkoosis/lintbrush/gorules/omitemptyscalar/cmd/omitemptyscalar@$(OMITEMPTYSCALAR_VER) ./...
+# write). Other repos run it as go run github.com/dkoosis/repo-standard/cmd/
+# omitemptyscalar@$(OMITEMPTYSCALAR_VER); this repo cannot pin its own
+# unreleased tag, so it runs the tree it is checking (tool-pin allows that here
+# only, by the go.mod module line).
+omitempty: ## Fail on a bool field tagged omitempty (omitemptyscalar, from this tree)
+	go run ./cmd/omitemptyscalar ./...
 
 ## doctor target provided by .sandbox/lib/Makefile.doctor.mk (project.conf-driven)
 ## cross / cross-amd64 / cross-arm64 provided by .sandbox/lib/Makefile.cross.mk
