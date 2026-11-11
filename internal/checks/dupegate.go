@@ -83,14 +83,25 @@ func jscpdCommand(masked string) []int {
 		if loc[1] < len(masked) && masked[loc[1]] == '@' {
 			return loc
 		}
-		before := strings.TrimRight(masked[:loc[0]], " \t")
+		// The word holding jscpd: make's prefix chars and a path (./node_modules/.bin/)
+		// may precede the name.
+		wordStart := strings.LastIndexAny(masked[:loc[0]], " \t;&|(") + 1
+		word := strings.TrimLeft(masked[wordStart:loc[0]], "@-+")
+		if word != "" && !strings.HasSuffix(word, "/") {
+			continue
+		}
+		before := strings.TrimRight(masked[:wordStart], " \t")
 		prev := before
 		if i := strings.LastIndexAny(before, " \t;&|("); i >= 0 {
 			prev = before[i+1:]
 		}
+		switch strings.TrimLeft(prev, "@-+") {
+		case "npx", "exec":
+			return loc
+		}
 		switch {
 		case before == "", strings.HasSuffix(before, ";"), strings.HasSuffix(before, "&"), strings.HasSuffix(before, "|"), strings.HasSuffix(before, "("),
-			prev == "npx", prev == "exec", prev == "--yes", prev == "-y", prev == "--no-install":
+			prev == "--yes", prev == "-y", prev == "--no-install":
 			return loc
 		}
 	}
@@ -284,16 +295,27 @@ func deadcodeFilterFindings(text, masked string, vals values.Values) []Finding {
 // namesOnly says whether pattern p is made of allowed names and alternation
 // punctuation alone: an unlisted name or a wildcard would hide more.
 func namesOnly(p string, names []string) bool {
-	byLength := slices.Clone(names)
-	slices.SortFunc(byLength, func(a, b string) int { return len(b) - len(a) })
-	found := false
-	for _, n := range byLength {
-		if strings.Contains(p, n) {
-			found = true
-			p = strings.ReplaceAll(p, n, "")
+	// A grep -E pattern splits on |, a basic one on \|. Each alternative, with
+	// optional anchors and one enclosing group removed, must be one allowed
+	// name; an empty alternative matches every line.
+	p = strings.TrimSpace(p)
+	for _, pair := range [][2]string{{`\(`, `\)`}, {"(", ")"}} {
+		if g, ok := strings.CutPrefix(p, pair[0]); ok {
+			if g, ok = strings.CutSuffix(g, pair[1]); ok {
+				p = g
+				break
+			}
 		}
 	}
-	return found && strings.Trim(p, `|\^$() `) == ""
+	for alt := range strings.SplitSeq(strings.ReplaceAll(p, `\|`, "|"), "|") {
+		alt = strings.TrimSpace(alt)
+		alt = strings.TrimPrefix(alt, "^")
+		alt = strings.TrimSuffix(alt, "$")
+		if !slices.Contains(names, alt) {
+			return false
+		}
+	}
+	return true
 }
 
 // deadcodeFilters reads the pipeline stages that follow the deadcode run in

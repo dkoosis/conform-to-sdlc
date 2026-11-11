@@ -27,6 +27,11 @@ func TestDupeGate(t *testing.T) {
 	}{
 		"no threshold, no config":                {recipe: bare, want: true, msg: "no --threshold"},
 		"config without threshold":               {recipe: bare, files: map[string]string{".jscpd.json": `{"gitignore": true}`}, want: true, msg: `sets no "threshold"`},
+		"at-sign prefix":                         {recipe: "\t@npx jscpd .\n", want: true, msg: "no --threshold"},
+		"at-sign prefix, threshold 10":           {recipe: "\t@npx jscpd --threshold 10 .\n", want: true, msg: "above 3%"},
+		"dash prefix":                            {recipe: "\t-npx jscpd .\n", want: true, msg: "no --threshold"},
+		"mixed prefixes":                         {recipe: "\t@-+npx jscpd .\n", want: true, msg: "no --threshold"},
+		"local bin path":                         {recipe: "\t./node_modules/.bin/jscpd .\n", want: true, msg: "no --threshold"},
 		"flag 3":                                 {recipe: "\tnpx --yes jscpd@5.1.2 --threshold 3 .\n"},
 		"flag 2.5 with equals":                   {recipe: "\tnpx --yes jscpd@5.1.2 --threshold=2.5 .\n"},
 		"flag 10":                                {recipe: "\tnpx --yes jscpd@5.1.2 --threshold 10 .\n", want: true, msg: "above 3%"},
@@ -221,12 +226,17 @@ func TestValues_AllowOnlyOnFilterRule(t *testing.T) {
 
 func TestDeadcodeFilter_AlternationCannotHideAnUnlistedFunction(t *testing.T) {
 	t.Parallel()
-	for _, pat := range []string{`'hookA\|realDead'`, `-E 'hookA|.*'`, `-E 'hookA.*'`} {
+	for _, pat := range []string{`'hookA\|realDead'`, `-E 'hookA|.*'`, `-E 'hookA.*'`,
+		`-E 'hookA|^'`, `-E 'hookA|'`, `'hookA\|$'`, `-E '|hookA'`, `-E 'hookA||hookA'`} {
 		recipe := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v " + pat + ") || exit 1; test -z \"$$out\"\n"
 		got := checks.CheckDeadcodeGate(deadcodeRepo(t, recipe, true), allow("hookA"))
 		if len(got) != 1 || got[0].Rule != checks.RuleDeadcodeFilter || !strings.Contains(got[0].Msg, "not just names") {
 			t.Errorf("pattern %s: want one deadcode-filter finding, got %v", pat, got)
 		}
+	}
+	sub := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v 'hookA') || exit 1; test -z \"$$out\"\n"
+	if got := checks.CheckDeadcodeGate(deadcodeRepo(t, sub, true), allow("hook")); len(got) != 1 || !strings.Contains(got[0].Msg, "not just names") {
+		t.Errorf("allowed hook must not accept pattern hookA, got %v", got)
 	}
 	ok := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v -E 'hookA|hookB') || exit 1; test -z \"$$out\"\n"
 	if got := checks.CheckDeadcodeGate(deadcodeRepo(t, ok, true), allow("hookA", "hookB")); len(got) != 0 {
