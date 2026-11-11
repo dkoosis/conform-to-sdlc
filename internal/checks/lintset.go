@@ -94,10 +94,10 @@ func matchesAnyFile(pattern string) bool {
 	return slices.ContainsFunc(everyFile, re.MatchString)
 }
 
-// anyText stands for the messages and source lines a linter reports: a text
-// or source pattern that matches all of them, the empty one included,
-// matches every issue.
-var anyText = []string{"", "x", "error returned from external package is unwrapped", "\treturn err"}
+// anyText stands for the messages and source lines a linter reports, none of
+// them empty: a text or source pattern that matches all of them matches every
+// issue.
+var anyText = []string{"x", "Z9", "error returned from external package is unwrapped", "\treturn err"}
 
 // matchesAll reports whether pattern matches every sample. An empty pattern
 // matches everything; one that does not compile matches nothing, since
@@ -118,9 +118,18 @@ func matchesAll(pattern string, samples []string) bool {
 	return true
 }
 
+// reachesEveryIssue reports whether the rule's path, text and source match
+// everything and its path-except spares no file.
+func (r exclusionRule) reachesEveryIssue() bool {
+	return matchesEveryFile(r.Path) &&
+		matchesAll(r.Text, anyText) &&
+		matchesAll(r.Source, anyText) &&
+		(r.PathExcept == "" || !matchesAnyFile(r.PathExcept))
+}
+
 // excludedEverywhere is the set of linters an exclusion switches off on
 // every file while linters.enable still lists them. That is a rule naming
-// the linter whose path, text and source match everything and whose
+// the linter, or naming none, whose path, text and source match everything and whose
 // path-except spares no file; an exclusions.paths entry matching every file;
 // or exclusions.paths-except entries that spare no file. The last two
 // silence every linter.
@@ -135,13 +144,14 @@ func (c lintSetConfig) excludedEverywhere(all []string) map[string]bool {
 		}
 	}
 	for _, r := range ex.Rules {
-		if !matchesEveryFile(r.Path) || !matchesAll(r.Text, anyText) || !matchesAll(r.Source, anyText) {
+		if !r.reachesEveryIssue() {
 			continue
 		}
-		if r.PathExcept != "" && matchesAnyFile(r.PathExcept) {
-			continue
+		linters := r.Linters
+		if len(linters) == 0 {
+			linters = all // golangci applies a rule with no linters list to every linter
 		}
-		for _, l := range r.Linters {
+		for _, l := range linters {
 			off[l] = true
 		}
 	}

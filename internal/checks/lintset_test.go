@@ -164,6 +164,20 @@ func TestLintSet(t *testing.T) {
 			golangc: withExclusionRule(t, "      - linters:\n          - gosec\n        path-except: '^internal/'\n"),
 		},
 		{
+			name:    "linter excluded by a one-character text",
+			golangc: withExclusionRule(t, "      - linters:\n          - gosec\n        text: '.'\n"),
+			want:    []string{"excluded on every file by linters.exclusions: gosec"},
+		},
+		{
+			name:    "catch-all rule with no linters list",
+			golangc: withExclusionRule(t, "      - path: '.*'\n        text: '.+'\n"),
+			want:    []string{"excluded on every file by linters.exclusions: asciicheck"},
+		},
+		{
+			name:    "rule with no linters list scoped by text passes",
+			golangc: withExclusionRule(t, "      - path: '.*'\n        text: 'Error return value of .os\\.Setenv. is not checked'\n"),
+		},
+		{
 			name:    "exclusion scoped by text passes",
 			golangc: withExclusionRule(t, "      - linters:\n          - wrapcheck\n        text: 'sig: func os\\.'\n"),
 		},
@@ -350,8 +364,10 @@ func TestLintSet_Fast(t *testing.T) {
 	for range 100 {
 		checks.CheckLintSet(dir, vals)
 	}
-	if per := time.Since(start) / 100; per > 10*time.Millisecond {
-		t.Errorf("lint-set takes %v a run, want under 10ms", per)
+	// 50ms is a twentieth of the whole check's 1s budget, with room for the
+	// race detector on a shared CI runner (about 11ms a run there).
+	if per := time.Since(start) / 100; per > 50*time.Millisecond {
+		t.Errorf("lint-set takes %v a run, want under 50ms", per)
 	}
 }
 
