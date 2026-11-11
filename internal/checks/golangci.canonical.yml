@@ -1,14 +1,14 @@
 version: "2"
 
-# The fleet's canonical golangci-lint config, embedded in conform-to-sdlc.
+# The fleet's canonical golangci-lint config, embedded in repo-standard.
 # lint-set fails a repo whose .golangci.yml does not enable every linter below
 # or weakens one of the settings lint-set names (nolintlint, errcheck,
 # gocritic's ruleguard wiring, forbidigo's context.Background rule). It is the
 # union of what ferret, sdlc, loto, canapay and trixi enable, minus depguard
 # (README "Canonical linter set" says why). A repo may enable more. It drops
-# one only by name and reason in docs/conform.json:
+# one only by name and reason in docs/repo-standard.json:
 #   {"rule": "lint-set", "drop": {"<linter>": "<reason>"}}
-# conform-to-sdlc --fix writes this file only into a repo that has none.
+# repo-standard --fix writes this file only into a repo that has none.
 
 run:
   tests: true

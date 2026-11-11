@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // mnemdReindexFixture is tool-mnemd-reindex.sh exactly as it stood in the
@@ -169,14 +169,14 @@ func TestHookExitDiscard(t *testing.T) {
 }
 
 // TestHookExitDiscard_Run: wired into Surface 1, the rule fires from a real
-// repo tree and stays clean when every hook conform itself ships passes it
+// repo tree and stays clean when every hook repo-standard itself ships passes it
 // (AC bullet 5).
 func TestHookExitDiscard_Run(t *testing.T) {
 	t.Parallel()
 
 	dir := writeRepo(t, goodRepo())
 	if n := rulesOf(checks.Run(dir))[checks.RuleHookExitDiscard]; n != 0 {
-		t.Errorf("conform's own conforming hooks tripped hook-exit-discard: %d finding(s)", n)
+		t.Errorf("repo-standard's own conforming hooks tripped hook-exit-discard: %d finding(s)", n)
 	}
 
 	files := goodRepo()

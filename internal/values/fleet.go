@@ -18,13 +18,13 @@ const (
 
 // Repo is one fleet-level fact: a repo's name and visibility. Profile and
 // exceptions are NOT here — those stay per-repo, declared in each repo's own
-// conform.json. No fact has two homes.
+// repo-standard.json. No fact has two homes.
 type Repo struct {
 	Name       string     `json:"name"`
 	Visibility Visibility `json:"visibility"`
 }
 
-// Fleet is the roster of every repo conform-to-sdlc's --fleet surface checks.
+// Fleet is the roster of every repo repo-standard's --fleet surface checks.
 type Fleet struct {
 	Repos []Repo `json:"repos"`
 }
@@ -43,8 +43,8 @@ var (
 //go:embed fleet.json
 var fleetJSON embed.FS
 
-// DefaultFleet loads and validates the fleet roster embedded in the conform-to-sdlc
-// binary, so `conform-to-sdlc --fleet` runs without a checkout of every repo.
+// DefaultFleet loads and validates the fleet roster embedded in the repo-standard
+// binary, so `repo-standard --fleet` runs without a checkout of every repo.
 func DefaultFleet() (*Fleet, error) {
 	data, err := fleetJSON.ReadFile("fleet.json")
 	if err != nil {

@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/lintpack"
+	"github.com/dkoosis/repo-standard/internal/lintpack"
 )
 
 // packRepair is the command that rewrites a drifted or partial pack.
-const packRepair = "go tool conform-to-sdlc pack sync (a rule change belongs upstream in dkoosis/lintbrush gorules/, then a conform-to-sdlc release)"
+const packRepair = "go tool repo-standard pack sync (a rule change belongs upstream in dkoosis/lintbrush gorules/, then a repo-standard release)"
 
 // checkLintPack compares the repo's .golangci-rules/ with the lintbrush pack
-// conform-to-sdlc embeds, byte for byte (lint-pack). The pack is Go source
+// repo-standard embeds, byte for byte (lint-pack). The pack is Go source
 // shipped whole, so bytes are the right comparison here; the README's
 // semantic-comparison principle is about the YAML lint core. No network call:
 // the copy that used to be fetched to compare against is now in the binary.
@@ -32,7 +32,7 @@ func checkLintPack(dir string) []Finding {
 			File:   lintpack.Dir + "/",
 			Rule:   RuleLintPack,
 			Msg:    "no lint rules pack — the ruleguard rules for the fleet's recurring Go defect classes do not run here",
-			Repair: "go tool conform-to-sdlc --fix (writes the pack when .golangci-rules/ is absent), then enable gocritic's ruleguard check on .golangci-rules/bugclasses.go and modern.go",
+			Repair: "go tool repo-standard --fix (writes the pack when .golangci-rules/ is absent), then enable gocritic's ruleguard check on .golangci-rules/bugclasses.go and modern.go",
 		})
 	}
 
@@ -48,12 +48,12 @@ func checkLintPack(dir string) []Finding {
 		rel := filepath.ToSlash(filepath.Join(lintpack.Dir, m.Repo))
 		want, err := lintpack.Bytes(m.Source)
 		if err != nil {
-			// An unreadable embed is conform-to-sdlc breaking, not the repo.
+			// An unreadable embed is repo-standard breaking, not the repo.
 			findings = append(findings, Finding{
 				File:   rel,
 				Rule:   RuleLintPack,
-				Msg:    "conform-to-sdlc cannot read its embedded lint rules pack: " + err.Error(),
-				Repair: "file a bug against conform-to-sdlc — the repo is not at fault",
+				Msg:    "repo-standard cannot read its embedded lint rules pack: " + err.Error(),
+				Repair: "file a bug against repo-standard — the repo is not at fault",
 			})
 			continue
 		}
@@ -72,7 +72,7 @@ func checkLintPack(dir string) []Finding {
 			findings = append(findings, Finding{
 				File:   rel,
 				Rule:   RuleLintPack,
-				Msg:    "differs from lintbrush gorules/" + m.Source + " at " + commit + ", the pack conform-to-sdlc ships",
+				Msg:    "differs from lintbrush gorules/" + m.Source + " at " + commit + ", the pack repo-standard ships",
 				Repair: packRepair,
 			})
 		}

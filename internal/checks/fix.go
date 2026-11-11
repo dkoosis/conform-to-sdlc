@@ -8,15 +8,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/lintpack"
+	"github.com/dkoosis/repo-standard/internal/lintpack"
 )
 
-// Fix applies the Surface-1 repairs conform-to-sdlc can make without judgment, and
+// Fix applies the Surface-1 repairs repo-standard can make without judgment, and
 // returns one line per action taken. A clean repo returns nothing.
 //
 // The bar for living here is narrow on purpose: the repair must be the ONLY
 // correct one, and it must never destroy work. Creating a file that is absent
-// qualifies. Rewriting one that exists does not — conform-to-sdlc would be guessing at
+// qualifies. Rewriting one that exists does not — repo-standard would be guessing at
 // content a human wrote, and a checker that edits your prose stops being
 // trusted long before it stops being right. Everything else stays a Repair
 // string on the finding, for a person to run.
@@ -87,7 +87,7 @@ func fixLintPack(dir string) (string, error) {
 	if !created {
 		return "", nil
 	}
-	return fmt.Sprintf(`created %s — the lintbrush rules pack conform-to-sdlc ships; enable gocritic's ruleguard check in .golangci.yml with rules: "${base-path}/.golangci-rules/bugclasses.go,${base-path}/.golangci-rules/modern.go"`, lintpack.Dir), nil
+	return fmt.Sprintf(`created %s — the lintbrush rules pack repo-standard ships; enable gocritic's ruleguard check in .golangci.yml with rules: "${base-path}/.golangci-rules/bugclasses.go,${base-path}/.golangci-rules/modern.go"`, lintpack.Dir), nil
 }
 
 // fixReadme writes a README.md skeleton when the repo root carries none.

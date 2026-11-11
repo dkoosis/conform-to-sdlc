@@ -1,12 +1,12 @@
 // Package checks implements Surface 1: the in-repo file checks that run bare
-// (`conform-to-sdlc`) inside a repository, every `make check`, hard-fail.
+// (`repo-standard`) inside a repository, every `make check`, hard-fail.
 //
 // Every finding names the file, the rule id, and a repair command. There is no
 // soft-fail: a rule too noisy to hard-fail gets deleted, not warned.
 //
 // Rule ids are the shared vocabulary between this checker and the values
 // file's exceptions (see internal/values): a repo excepts a rule by listing
-// its id in conform.json with a reason. Ids are kebab-case and stable.
+// its id in repo-standard.json with a reason. Ids are kebab-case and stable.
 package checks
 
 import (
@@ -16,48 +16,48 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/values"
+	"github.com/dkoosis/repo-standard/internal/values"
 )
 
-// ValuesFile is the repo's conform.json, under docs/ like every other
+// ValuesFile is the repo's repo-standard.json, under docs/ like every other
 // repo-level declaration: the root is minimal (decision d9cd0e20868b). Only
-// dotfiles a host tool reads at the root by name stay there; conform-to-sdlc reads its
+// dotfiles a host tool reads at the root by name stay there; repo-standard reads its
 // own file wherever it says, so it says docs/.
-const ValuesFile = "docs/conform.json"
+const ValuesFile = "docs/repo-standard.json"
 
 // LegacyValuesFile is where the file sat before ValuesFile moved it, and
-// conform-to-sdlc still reads it when docs/ has none. Five of seven fleet repos declare
+// repo-standard still reads it when docs/ has none. Five of seven fleet repos declare
 // their profile and exceptions at the root today; a cutover that read only
 // ValuesFile would drop every one of those exceptions on the next sweep, so
 // each repo would light up with findings it had already excused — and the
 // values-file finding pointing at the move would be buried in them.
 //
-// Reading it is not blessing it: root-minimal still reports a root conform.json
+// Reading it is not blessing it: root-minimal still reports a root repo-standard.json
 // with `git mv` as the repair. Read here, flagged there — that pairing is what
 // lets a repo move on its own schedule instead of all at once. Delete this
 // constant and its fallback once no fleet repo declares at the root.
-const LegacyValuesFile = "conform.json"
+const LegacyValuesFile = "repo-standard.json"
 
 // Surface-1 rule ids. Other surfaces reserve their own ids in the same
 // vocabulary (e.g. `no-git-ops`, honored by --local for repos like loto that
 // declare git operations out of scope).
 const (
-	RuleValuesFile      = "values-file"          // docs/conform.json present and valid
+	RuleValuesFile      = "values-file"          // docs/repo-standard.json present and valid
 	RuleMakefileVerb    = "makefile-verbs"       // four-verb contract + prereq composition
 	RuleMakefileDocs    = "makefile-docs"        // every target carries a ## doc comment
 	RuleLintFloor       = "lint-floor"           // .golangci.yml carries the 6-linter baseline floor
 	RuleLintContext     = "lint-contextcheck"    // contextcheck must stay demoted
 	RuleLintSet         = values.DropRule        // .golangci.yml enables the canonical linter set at its strict settings
-	RuleLintPack        = "lint-pack"            // .golangci-rules/ is byte-equal to the lintbrush pack conform-to-sdlc embeds
+	RuleLintPack        = "lint-pack"            // .golangci-rules/ is byte-equal to the lintbrush pack repo-standard embeds
 	RuleLintPin         = "lint-pin"             // exactly one golangci-lint pin location
 	RuleCIGate          = "ci-gate"              // CI calls make check; no gate re-implemented in YAML
 	RuleCodexShape      = "codex-workflow"       // codex-review fires on issue_comment, never pull_request
-	RuleRetiredFiles    = "retired-files"        // files folded into conform-to-sdlc are gone
+	RuleRetiredFiles    = "retired-files"        // files folded into repo-standard are gone
 	RuleBDConfig        = "bd-config"            // bd config keys present
 	RuleHooksShape      = "hooks-shape"          // tracked .githooks the global hooks forward to
 	RuleReadme          = "readme"               // README.md present, non-empty, opening with a heading
-	RuleRootMinimal     = "root-minimal"         // no ROADMAP.md / conform.json / NORTH_STAR.md / kg at the root
-	RuleSandboxLib      = "sandbox-lib"          // .sandbox/lib matches the canonical copy conform-to-sdlc ships
+	RuleRootMinimal     = "root-minimal"         // no ROADMAP.md / repo-standard.json / NORTH_STAR.md / kg at the root
+	RuleSandboxLib      = "sandbox-lib"          // .sandbox/lib matches the canonical copy repo-standard ships
 	RuleAgentsBlock     = "agents-managed-block" // root AGENTS.md carries no block a tool wrote
 	RuleCIDocsSkip      = "ci-docs-skip"         // a detect job lets a docs-only PR skip make check, context kept
 	RuleGateSkip        = "gate-skip"            // a check or audit step exits 0 when its tool is missing
@@ -80,7 +80,7 @@ func (f Finding) String() string {
 }
 
 // Run executes all Surface-1 checks against the repo rooted at dir and
-// returns the findings, with the repo's declared exceptions (conform.json)
+// returns the findings, with the repo's declared exceptions (repo-standard.json)
 // filtered out. A missing or invalid values file is itself a finding.
 func Run(dir string) []Finding {
 	vals, findings := loadValues(dir)
@@ -115,7 +115,7 @@ func Run(dir string) []Finding {
 	return findings
 }
 
-// loadValues reads docs/conform.json (ValuesFile), falling back to the root
+// loadValues reads docs/repo-standard.json (ValuesFile), falling back to the root
 // (LegacyValuesFile) while the fleet migrates. Absent or invalid, the checks
 // still run — under the default tool profile with no exceptions — and the
 // values problem is reported as a finding of its own.
@@ -137,7 +137,7 @@ func loadValues(dir string) (values.Values, []Finding) {
 			return fallback, []Finding{{
 				File:   ValuesFile,
 				Rule:   RuleValuesFile,
-				Msg:    "values file missing — conform-to-sdlc needs the repo's profile (tool|lib) and declared exceptions",
+				Msg:    "values file missing — repo-standard needs the repo's profile (tool|lib) and declared exceptions",
 				Repair: `create ` + ValuesFile + `: {"profile": "tool", "exceptions": []}`,
 			}}
 		}

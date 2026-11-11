@@ -77,5 +77,5 @@ func RootStrayNames() []string {
 	return names
 }
 
-// TrackedHookEvents returns the events conform requires a tracked hook for.
+// TrackedHookEvents returns the events repo-standard requires a tracked hook for.
 func TrackedHookEvents() []string { return trackedHookEvents }

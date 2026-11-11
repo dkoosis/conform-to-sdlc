@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/values"
+	"github.com/dkoosis/repo-standard/internal/values"
 )
 
 func testSpec() ScaffoldSpec {
@@ -23,7 +23,7 @@ func testSpec() ScaffoldSpec {
 }
 
 // TestScaffoldPassesChecker is the bead's acceptance criterion: a scaffolded
-// repo passes conform-to-sdlc unedited, on both profiles.
+// repo passes repo-standard unedited, on both profiles.
 func TestScaffoldPassesChecker(t *testing.T) {
 	for _, profile := range []values.Profile{values.ProfileTool, values.ProfileLib} {
 		t.Run(string(profile), func(t *testing.T) {
@@ -186,7 +186,7 @@ func TestScaffoldRejectsBadSpec(t *testing.T) {
 }
 
 // TestScaffoldSpecDefaults: the spec fills its own blanks from the repo
-// name, so `conform-to-sdlc init <repo>` is enough.
+// name, so `repo-standard init <repo>` is enough.
 func TestScaffoldSpecDefaults(t *testing.T) {
 	spec := ScaffoldSpec{Repo: "widget"}
 	spec.applyDefaults()
@@ -207,18 +207,18 @@ func TestScaffoldSpecDefaults(t *testing.T) {
 	}
 }
 
-// TestScaffoldSelfcheckRunsThisTool: a scaffolded repo's selfcheck must call
-// the binary by its current name. The rename to conform-to-sdlc missed this
+// TestScaffoldStandardRunsThisTool: a scaffolded repo's standard must call
+// the binary by its current name. The rename to repo-standard missed this
 // recipe once, and every new repo would have run a binary that no longer ships.
-func TestScaffoldSelfcheckRunsThisTool(t *testing.T) {
+func TestScaffoldStandardRunsThisTool(t *testing.T) {
 	mk := renderMakefile(testSpec())
-	_, after, ok := strings.Cut(mk, "\nselfcheck:")
+	_, after, ok := strings.Cut(mk, "\nstandard:")
 	if !ok {
-		t.Fatalf("scaffolded Makefile has no selfcheck target:\n%s", mk)
+		t.Fatalf("scaffolded Makefile has no standard target:\n%s", mk)
 	}
 	lines := strings.SplitN(after, "\n", 3)
-	if len(lines) < 2 || lines[1] != "\tconform-to-sdlc" {
-		t.Errorf("selfcheck recipe = %q; want %q", lines[1], "\tconform-to-sdlc")
+	if len(lines) < 2 || lines[1] != "\trepo-standard" {
+		t.Errorf("standard recipe = %q; want %q", lines[1], "\trepo-standard")
 	}
 }
 

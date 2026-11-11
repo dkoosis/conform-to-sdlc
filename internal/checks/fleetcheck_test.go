@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // ghStub answers gh API paths from a canned map; absent path = 404.
@@ -35,7 +35,7 @@ func conformingRepoResponses(full string) map[string]string {
 // allFleetResponses maps every roster repo to the same canned answers.
 func allFleetResponses(shape func(full string) map[string]string) map[string]string {
 	responses := map[string]string{}
-	for _, name := range []string{"ferret", "snipe", "canapay", "fo", "loto", "strand", "npharvester", "atomicfile", "keyring", "next", "conform-to-sdlc"} {
+	for _, name := range []string{"ferret", "snipe", "canapay", "fo", "loto", "strand", "npharvester", "atomicfile", "keyring", "next", "repo-standard"} {
 		maps.Copy(responses, shape("dkoosis/"+name))
 	}
 	return responses
@@ -120,13 +120,13 @@ func TestRunFleet_ProtectionShape(t *testing.T) {
 	}
 }
 
-// TestRunFleet_ExceptionFromRepoValues: a repo's own conform.json exceptions
+// TestRunFleet_ExceptionFromRepoValues: a repo's own repo-standard.json exceptions
 // apply to its fleet findings.
 func TestRunFleet_ExceptionFromRepoValues(t *testing.T) {
 	responses := allFleetResponses(conformingRepoResponses)
 	responses["repos/dkoosis/keyring"] = `{"default_branch":"main","allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":false}`
 	valuesJSON := `{"profile": "lib", "exceptions": [{"rule": "merge-policy", "reason": "finished micro-lib; branch cleanup is manual by choice"}]}`
-	responses["repos/dkoosis/keyring/contents/docs/conform.json"] = fmt.Sprintf(`{"content":%q}`, base64.StdEncoding.EncodeToString([]byte(valuesJSON)))
+	responses["repos/dkoosis/keyring/contents/docs/repo-standard.json"] = fmt.Sprintf(`{"content":%q}`, base64.StdEncoding.EncodeToString([]byte(valuesJSON)))
 	restore := checks.SetGHAPI(ghStub(responses))
 	defer restore()
 

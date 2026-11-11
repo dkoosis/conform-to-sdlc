@@ -40,7 +40,7 @@ type Exception struct {
 // DropRule is the one rule id an exception may carry a drop for.
 const DropRule = "lint-set"
 
-// Values is one repo's conform.json: its profile plus its declared
+// Values is one repo's repo-standard.json: its profile plus its declared
 // exceptions.
 type Values struct {
 	Profile    Profile     `json:"profile"`

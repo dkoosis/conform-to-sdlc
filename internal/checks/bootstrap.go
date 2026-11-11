@@ -1,7 +1,7 @@
 package checks
 
-// Bootstrap is the L2 half of `conform-to-sdlc init`: the machine and GitHub state a
-// scaffolded repo needs before `conform-to-sdlc --local` and `conform-to-sdlc --fleet` go
+// Bootstrap is the L2 half of `repo-standard init`: the machine and GitHub state a
+// scaffolded repo needs before `repo-standard --local` and `repo-standard --fleet` go
 // green. Surface 1 is files, and Scaffold writes them; this file writes what
 // no file can carry.
 //
@@ -18,7 +18,7 @@ package checks
 // mergePolicyFindings' PATCH. No step sets core.hooksPath: under global
 // forwarding (decision 51900b14be55) no repo sets a local one, and the
 // global hooks dir is machine wiring, not a repo's.
-// One vocabulary, whether conform-to-sdlc is reporting a gap or closing it.
+// One vocabulary, whether repo-standard is reporting a gap or closing it.
 
 import (
 	"context"
@@ -81,7 +81,7 @@ func BootstrapPlan(spec ScaffoldSpec) []Step {
 			// --skip-agents: bd's own default init writes AGENTS.md,
 			// CLAUDE.md, .claude/settings.json and a Codex skill install —
 			// none part of this contract, and the first carries a managed
-			// block that trips conform-to-sdlc's own agents-managed-block rule,
+			// block that trips repo-standard's own agents-managed-block rule,
 			// breaking reportInitResult's "one call produces a passing
 			// repo" claim the moment bd init is allowed to finish (cfm-d4r).
 			Why:      "bd needs a store before " + bdConfigFile + " has a live counterpart",

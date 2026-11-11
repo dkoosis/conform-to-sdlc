@@ -3,7 +3,7 @@
 // generically for the whole fleet. Whatever ferret can't state generically
 // becomes a per-repo value, and every value carries a reason.
 //
-// Every dkoosis fleet repo declares a docs/conform.json:
+// Every dkoosis fleet repo declares a docs/repo-standard.json:
 //
 //	{
 //	  "profile": "tool",
@@ -37,18 +37,18 @@
 // already owns — GOLANGCI_LINT_VERSION, BUILD_SYSTEM, tool lists — are
 // explicitly OUT of this schema. Machine-sourceable shell config lives in
 // project.conf; structured per-repo policy (profile plus reasoned
-// exceptions) lives in conform.json. One home per fact: nothing here ever
-// duplicates a project.conf key, and conform.json is never made
+// exceptions) lives in repo-standard.json. One home per fact: nothing here ever
+// duplicates a project.conf key, and repo-standard.json is never made
 // shell-sourceable to blur that line.
 //
 // # Fleet roster
 //
-// fleet.json is the one central roster, go:embed'ed so `conform-to-sdlc --fleet`
+// fleet.json is the one central roster, go:embed'ed so `repo-standard --fleet`
 // runs from the installed binary without a checkout of every repo. It owns
 // fleet-level facts only — a repo's name and its GitHub visibility (the
 // public/private split) — never profile or exceptions, which stay per-repo.
 //
 // cc-plugins is deliberately absent from the roster: it is markdown-only,
-// outside the Go contract conform-to-sdlc enforces. The roster is the authority on
+// outside the Go contract repo-standard enforces. The roster is the authority on
 // fleet membership, so the omission is the decision, not an oversight.
 package values

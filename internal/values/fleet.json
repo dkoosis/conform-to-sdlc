@@ -10,6 +10,6 @@
     {"name": "atomicfile", "visibility": "public"},
     {"name": "keyring", "visibility": "private"},
     {"name": "next", "visibility": "public"},
-    {"name": "conform-to-sdlc", "visibility": "public"}
+    {"name": "repo-standard", "visibility": "public"}
   ]
 }

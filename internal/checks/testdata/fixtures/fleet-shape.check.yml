@@ -154,7 +154,7 @@ jobs:
           # under RUNNER_TEMP lets the version-keyed cache below skip the rebuild.
           echo "GOBIN=$RUNNER_TEMP/.gobin" >> "$GITHUB_ENV"
           echo "$RUNNER_TEMP/.gobin" >> "$GITHUB_PATH"
-          # Tool versions: ONE pin location, .sandbox/project.conf (conform
+          # Tool versions: ONE pin location, .sandbox/project.conf (repo-standard
           # lint-pin). Exported to env so the cache key and install step below
           # read the same values — no literals in this file.
           source .sandbox/project.conf
@@ -219,7 +219,7 @@ jobs:
           key: ${{ runner.os }}-gotools-glci${{ env.GOLANGCI_LINT_VERSION }}-fo${{ env.FO_VERSION }}
 
       # Lint tools: versions come from .sandbox/project.conf (the ONE pin
-      # location, conform lint-pin; fo is pinned, not @latest
+      # location, repo-standard lint-pin; fo is pinned, not @latest
       # — make check depends on `fo wrap diag`, released in v0.2.3). `go
       # install` builds them on whichever OS the matrix leg runs (no vendored
       # darwin binaries exist) into GOBIN (set above, already on PATH). Each
@@ -240,7 +240,7 @@ jobs:
       # The -race gate (epic ccp-sbp.4): `make check` runs tests with the cache
       # ON and WITHOUT the race detector (race lives in `make audit`, unrun in
       # CI). This step is the missing machine that catches the concurrency-
-      # lifecycle defect class. The definition lives in the Makefile (conform
+      # lifecycle defect class. The definition lives in the Makefile (repo-standard
       # ci-gate: no gate re-implemented in YAML); race-ci is the hermetic plain
       # `./...` leg, without the integration tags `make race` pulls in.
       - name: test (race)

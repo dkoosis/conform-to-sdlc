@@ -1,14 +1,14 @@
 // Package sandbox carries the canonical .sandbox/lib — the shared shell that
 // every fleet repo's sandbox activation and container setup run.
 //
-// It lives here because conform-to-sdlc is already in every repo's go.mod as a tool
+// It lives here because repo-standard is already in every repo's go.mod as a tool
 // and already runs on every `make check`. Before this, the same library was
 // hand-copied into nine repos, each stamping the same version header:
 // GO_SANDBOX_REF=v0.2.0 named four different lib-activate.sh files. A vendored
-// copy with no checker drifts silently; a vendored copy conform-to-sdlc compares byte
+// copy with no checker drifts silently; a vendored copy repo-standard compares byte
 // for byte cannot.
 //
-// The pinned conform-to-sdlc version in a repo's go.mod IS the sandbox-lib version.
+// The pinned repo-standard version in a repo's go.mod IS the sandbox-lib version.
 // There is no second ref to keep in step.
 package sandbox
 
@@ -69,7 +69,7 @@ func Names() ([]string, error) {
 
 // Sync writes every canonical file into dir/.sandbox/lib, overwriting drift.
 // It reports the names it changed, in sorted order; an already-conforming repo
-// yields none. Files under .sandbox/lib that conform-to-sdlc does not own are left
+// yields none. Files under .sandbox/lib that repo-standard does not own are left
 // alone — a repo may keep its own helpers there.
 func Sync(dir string) ([]string, error) {
 	files, err := Files()

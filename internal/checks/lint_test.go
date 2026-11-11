@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // TestLintFloor_FleetFixtures validates the parser against the five shipped

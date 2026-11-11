@@ -1,4 +1,4 @@
-# conform-to-sdlc
+# repo-standard
 
 ★ One program, pinned in every dkoosis Go repo, fails `make check` when that repo's setup — Makefile targets, lint rules, CI workflow, git hooks, bd config, GitHub settings — drifts from the fleet standard, and names the command that puts it back.
 
@@ -7,15 +7,17 @@ Makefile verbs, lint core, CI shape, hooks, bd config, GitHub settings — check
 instead of copied, so improvements propagate as pin bumps and templates can't
 drift.
 
+Renamed from conform-to-sdlc on 2026-11-11: the exceptions file is now `docs/repo-standard.json` and the make target `standard` (was `selfcheck`).
+
 Three surfaces, because the three kinds of state live in three places:
 
 | surface | sees | runs |
 |---|---|---|
-| `conform-to-sdlc` | in-repo files: Makefile verbs, `.golangci.yml` core and the canonical linter set, `.golangci-rules/` byte-equal to the lintbrush pack it embeds, single pin, CI-calls-make-check behind a docs-only skip, bd config | every `make check`, hard-fail |
-| `conform-to-sdlc --local` | machine wiring CI can't see: `core.hooksPath`, hooks executable, dolt remote | `make doctor`, session start |
-| `conform-to-sdlc --fleet` | GitHub: branch protection, labels, merge policy | promulgation + pin-bump sweeps |
-| `conform-to-sdlc --fix` | the same in-repo files, but writes the ones that are simply absent (README, CI workflow, `.golangci.yml`, `.golangci-rules/`), then checks | adopting a new rule; scaffolding |
-| `conform-to-sdlc pack sync` | `.golangci-rules/`: rewrites the lintbrush pack files from the embedded copy | the repair lint-pack names |
+| `repo-standard` | in-repo files: Makefile verbs, `.golangci.yml` core and the canonical linter set, `.golangci-rules/` byte-equal to the lintbrush pack it embeds, single pin, CI-calls-make-check behind a docs-only skip, bd config | every `make check`, hard-fail |
+| `repo-standard --local` | machine wiring CI can't see: `core.hooksPath`, hooks executable, dolt remote | `make doctor`, session start |
+| `repo-standard --fleet` | GitHub: branch protection, labels, merge policy | promulgation + pin-bump sweeps |
+| `repo-standard --fix` | the same in-repo files, but writes the ones that are simply absent (README, CI workflow, `.golangci.yml`, `.golangci-rules/`), then checks | adopting a new rule; scaffolding |
+| `repo-standard pack sync` | `.golangci-rules/`: rewrites the lintbrush pack files from the embedded copy | the repair lint-pack names |
 
 Principles:
 
@@ -24,10 +26,10 @@ Principles:
   YAML makes rules noisy. The lint rules pack is the exception: it is Go source
   shipped whole, so lint-pack compares it byte for byte. Its canon is
   dkoosis/lintbrush `gorules/`; `make pack-refresh` copies a lintbrush commit
-  into the embed, and a conform-to-sdlc release carries it to the fleet.
+  into the embed, and a repo-standard release carries it to the fleet.
 - **Failures name file, rule, repair command.**
 - **<1s** for the in-`check` surface, or it gets bypassed.
-- **Dogfooded.** This repo's CI runs conform-to-sdlc on itself.
+- **Dogfooded.** This repo's CI runs repo-standard on itself.
 - **`--fix` only ever creates what is absent.** It never rewrites a file a
   human wrote, and the skeleton it writes is deliberately still red — a
   scaffold that passed the gate would read as work done and carry none.
@@ -38,7 +40,7 @@ Non-goals:
   the problem this exists to replace.
 - Soft-fail or warning levels. A rule earns hard-fail or it is deleted.
 - Per-repo variants of the contract. A repo declares an exception by rule id
-  in `docs/conform.json`, with a reason — it does not fork the rule.
+  in `docs/repo-standard.json`, with a reason — it does not fork the rule.
 - Formatting or style opinions already owned by `.golangci.yml`.
 - Requiring what sdlc has no place for. sdlc's `SPEC.md` says where an epic's
   state and the North Star live; a rule here that asks a repo for another copy
@@ -55,7 +57,7 @@ beyond the canonical list, gocritic's ruleguard wiring of the lintbrush pack
 the embedded `internal/checks/golangci.canonical.yml`, which `--fix` writes
 into a repo that has no `.golangci.yml`. A linter that is enabled but excluded
 on every file by `linters.exclusions` counts as off. A repo may enable more. It
-drops a linter only by name and reason in `docs/conform.json`:
+drops a linter only by name and reason in `docs/repo-standard.json`:
 `{"rule": "lint-set", "drop": {"<linter>": "<reason>"}}`. It keeps a weaker
 setting the same way, keyed by the setting's path under `linters.settings`, as
 `"nolintlint.allow-unused"`; the finding names the key.

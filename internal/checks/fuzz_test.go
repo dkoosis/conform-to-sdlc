@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 const twoFuzz = `package x

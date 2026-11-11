@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // delegatingHook carries the beads-managed block marker the bd-hooks and
@@ -38,8 +38,8 @@ exit 0
 // values loader needs.
 func localRepo() map[string]string {
 	files := map[string]string{
-		"docs/conform.json":  goodValues,
-		".beads/config.yaml": goodBDConfig,
+		"docs/repo-standard.json": goodValues,
+		".beads/config.yaml":      goodBDConfig,
 	}
 	for _, e := range hookEvents {
 		files[filepath.Join(".githooks", e)] = delegatingHook
@@ -141,7 +141,7 @@ func TestRunLocal_DeadWiring(t *testing.T) {
 // whole hook family in one word; the bd rules still run.
 func TestRunLocal_NoGitOpsException(t *testing.T) {
 	files := map[string]string{
-		"docs/conform.json": `{"profile": "tool", "exceptions": [
+		"docs/repo-standard.json": `{"profile": "tool", "exceptions": [
 			{"rule": "no-git-ops", "reason": "loto never performs git operations by design"}]}`,
 		".beads/config.yaml": goodBDConfig,
 	}
@@ -216,7 +216,7 @@ func TestHooksPath_MissingForwarder(t *testing.T) {
 	assertOneOrClean(t, checks.CheckHooksPathFn(context.Background(), dir), checks.RuleHooksPath, "global post-merge")
 }
 
-// bd's prepare-commit-msg runs from the global hook, so conform requires no
+// bd's prepare-commit-msg runs from the global hook, so repo-standard requires no
 // tracked copy (cfm-cdy).
 func TestBDHooks_NoPrepareCommitMsg(t *testing.T) {
 	t.Parallel()

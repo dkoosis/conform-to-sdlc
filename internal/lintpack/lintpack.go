@@ -4,8 +4,8 @@
 // Its canon is dkoosis/lintbrush, gorules/. Each repo used to copy the pack and
 // run check-pack-drift.sh against an upstream URL; when that URL died the
 // script warned and exited 0, so nothing checked the copies and they drifted.
-// conform-to-sdlc now embeds the pack, as it embeds .sandbox/lib, and compares
-// each repo's copy byte for byte with no network call. The conform-to-sdlc
+// repo-standard now embeds the pack, as it embeds .sandbox/lib, and compares
+// each repo's copy byte for byte with no network call. The repo-standard
 // version a repo pins is its pack version.
 //
 // _gorules/ is refreshed only by `make pack-refresh`, which reads a lintbrush
@@ -103,7 +103,7 @@ func ReadSource() (Source, error) {
 
 // Sync writes the pack into dir/.golangci-rules, overwriting drift. It writes
 // every required file, and an opt-in file only when the repo already holds it,
-// so syncing never turns an opt-in rule on. Files conform-to-sdlc does not own
+// so syncing never turns an opt-in rule on. Files repo-standard does not own
 // are left alone. It reports the repo names it changed.
 func Sync(dir string) ([]string, error) {
 	target := filepath.Join(dir, Dir)

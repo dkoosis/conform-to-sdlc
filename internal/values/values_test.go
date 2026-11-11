@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/values"
+	"github.com/dkoosis/repo-standard/internal/values"
 )
 
 func TestLoad_Valid(t *testing.T) {
@@ -168,15 +168,15 @@ func TestLoad_Invalid(t *testing.T) {
 	}
 }
 
-// TestLoad_Dogfood pins conform-to-sdlc's own docs/conform.json against this
+// TestLoad_Dogfood pins repo-standard's own docs/repo-standard.json against this
 // package's schema — the loader must be able to parse the file it exists to
 // validate.
 func TestLoad_Dogfood(t *testing.T) {
 	t.Parallel()
 
-	got, err := values.Load("../../docs/conform.json")
+	got, err := values.Load("../../docs/repo-standard.json")
 	if err != nil {
-		t.Fatalf("Load(../../docs/conform.json) returned error: %v", err)
+		t.Fatalf("Load(../../docs/repo-standard.json) returned error: %v", err)
 	}
 
 	if got.Profile != values.ProfileTool {

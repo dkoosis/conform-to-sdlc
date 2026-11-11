@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 func auditFindings(t *testing.T, workflows map[string]string) []checks.Finding {
@@ -96,7 +96,7 @@ func TestAuditSchedule_Fix(t *testing.T) {
 	}
 }
 
-// conform's own repo carries the nightly workflow its rule asks for, and it
+// repo-standard's own repo carries the nightly workflow its rule asks for, and it
 // is the one the scaffold writes.
 func TestAuditSchedule_OwnWorkflowMatchesScaffold(t *testing.T) {
 	t.Parallel()
@@ -106,7 +106,7 @@ func TestAuditSchedule_OwnWorkflowMatchesScaffold(t *testing.T) {
 	}
 	dir := writeRepo(t, map[string]string{".github/workflows/audit.yml": string(own)})
 	if got := checks.CheckCIAuditSchedule(dir); len(got) != 0 {
-		t.Errorf("conform's own audit.yml fails the rule: %v", got)
+		t.Errorf("repo-standard's own audit.yml fails the rule: %v", got)
 	}
 	empty := writeRepo(t, nil)
 	if _, err := checks.Fix(empty); err != nil {
@@ -114,6 +114,6 @@ func TestAuditSchedule_OwnWorkflowMatchesScaffold(t *testing.T) {
 	}
 	written, _ := os.ReadFile(filepath.Join(empty, ".github", "workflows", "audit.yml"))
 	if !bytes.Equal(written, own) {
-		t.Error("conform's audit.yml differs from the scaffold's")
+		t.Error("repo-standard's audit.yml differs from the scaffold's")
 	}
 }

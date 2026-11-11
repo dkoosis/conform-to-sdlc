@@ -12,7 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/values"
+	"github.com/dkoosis/repo-standard/internal/values"
 )
 
 // CanonicalGolangci is the fleet's canonical .golangci.yml: the linter set
@@ -211,7 +211,7 @@ func canonicalSet() (lintSetConfig, map[string]bool, error) {
 }
 
 // lintSetDrops collects the linters, and the settings by their settingIDs
-// key, that the repo drops by reason in docs/conform.json, and a finding for
+// key, that the repo drops by reason in docs/repo-standard.json, and a finding for
 // each drop with no reason or that names nothing lint-set checks.
 func lintSetDrops(vals values.Values, canon map[string]bool) (map[string]bool, []Finding) {
 	drops := map[string]bool{}
@@ -248,7 +248,7 @@ func lintSetDrops(vals values.Values, canon map[string]bool) (map[string]bool, [
 // in the canonical set, or that weakens a setting the set holds strict
 // (lint-set; epic cfm-pxx R2, decisions 284ca53cd396 and d7ea466a8172). A repo
 // may enable more. It leaves one out only by name and reason in
-// docs/conform.json: {"rule": "lint-set", "drop": {"<linter>": "<reason>"}};
+// docs/repo-standard.json: {"rule": "lint-set", "drop": {"<linter>": "<reason>"}};
 // a weak setting is kept the same way, keyed by its settingIDs entry. A
 // linter enabled but excluded on every file counts as switched off.
 //
@@ -260,8 +260,8 @@ func checkLintSet(dir string, vals values.Values) []Finding {
 		return []Finding{{
 			File:   golangciFile,
 			Rule:   RuleLintSet,
-			Msg:    "conform-to-sdlc cannot parse its embedded canonical .golangci.yml: " + err.Error(),
-			Repair: "file a bug against conform-to-sdlc — the repo is not at fault",
+			Msg:    "repo-standard cannot parse its embedded canonical .golangci.yml: " + err.Error(),
+			Repair: "file a bug against repo-standard — the repo is not at fault",
 		}}
 	}
 	drops, findings := lintSetDrops(vals, canonOn)
@@ -280,7 +280,7 @@ func checkLintSet(dir string, vals values.Values) []Finding {
 			File:   golangciFile,
 			Rule:   RuleLintSet,
 			Msg:    "no .golangci.yml — the repo runs none of the canonical linter set",
-			Repair: "go tool conform-to-sdlc --fix (writes the canonical .golangci.yml when none exists)",
+			Repair: "go tool repo-standard --fix (writes the canonical .golangci.yml when none exists)",
 		})
 	}
 	var cfg lintSetConfig

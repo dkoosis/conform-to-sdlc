@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
-	"github.com/dkoosis/conform-to-sdlc/internal/values"
+	"github.com/dkoosis/repo-standard/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/values"
 )
 
 func TestMakefile_Violations(t *testing.T) {
@@ -96,11 +96,11 @@ func TestMakefile_Violations(t *testing.T) {
 			wantMsg:  "floor targets missing: clean",
 		},
 		{
-			name:     "check does not run selfcheck last",
-			makefile: strings.Replace(goodMakefile, "check: vet lint test build selfcheck", "check: vet lint selfcheck test build", 1),
+			name:     "check does not run standard last",
+			makefile: strings.Replace(goodMakefile, "check: vet lint test build standard", "check: vet lint standard test build", 1),
 			profile:  values.ProfileTool,
 			wantRule: checks.RuleMakefileVerb,
-			wantMsg:  "selfcheck last",
+			wantMsg:  "standard last",
 		},
 		{
 			name:     "no Makefile at all",
@@ -141,6 +141,21 @@ func TestMakefile_Violations(t *testing.T) {
 // TestMakefile_Conforming: the reference shape is clean under both the tool
 // contract and (deploy removed) the lib contract, and variable assignments
 // are not mistaken for targets.
+// TestMakefile_OldSelfcheckTargetNamesRename: a repo still on the pre-rename
+// selfcheck target gets a finding that names the rename, not a bare "missing".
+func TestMakefile_OldSelfcheckTargetNamesRename(t *testing.T) {
+	t.Parallel()
+
+	mk := strings.ReplaceAll(goodMakefile, "standard", "selfcheck")
+	got := checks.CheckMakefile(writeRepo(t, map[string]string{"Makefile": mk}), values.ProfileTool)
+	for _, f := range got {
+		if strings.Contains(f.Msg, "floor targets missing: standard") && strings.Contains(f.Repair, "rename the selfcheck target to standard") {
+			return
+		}
+	}
+	t.Errorf("no finding names the selfcheck rename: %v", got)
+}
+
 func TestMakefile_Conforming(t *testing.T) {
 	t.Parallel()
 

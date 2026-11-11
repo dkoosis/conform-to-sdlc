@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pack-refresh — copy the lintbrush rules pack into conform-to-sdlc's embed.
+# pack-refresh — copy the lintbrush rules pack into repo-standard's embed.
 #
 # usage: scripts/pack-refresh <lintbrush checkout>
 #
@@ -23,7 +23,7 @@ fi
 
 mkdir -p "$dest"
 {
-	echo "# The lintbrush rules pack conform-to-sdlc embeds. Written by make pack-refresh; do not edit."
+	echo "# The lintbrush rules pack repo-standard embeds. Written by make pack-refresh; do not edit."
 	echo "commit $commit"
 	for f in "${files[@]}"; do
 		git -C "$src" show "$commit:gorules/$f" >"$dest/$f"
@@ -31,5 +31,5 @@ mkdir -p "$dest"
 	done
 } >"$dest/SOURCE"
 
-go run ./cmd/conform-to-sdlc pack sync
+go run ./cmd/repo-standard pack sync
 echo "pack-refresh: embedded lintbrush gorules at ${commit:0:12}"

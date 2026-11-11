@@ -1,4 +1,4 @@
-# The lintbrush rules pack conform-to-sdlc embeds. Written by make pack-refresh; do not edit.
+# The lintbrush rules pack repo-standard embeds. Written by make pack-refresh; do not edit.
 commit 5dae7e4b1e7d49ab4314671a579587a7c37ddac9
 b09fcaaeec82ee118940d810208a9f629b07d1cd rules.go
 79ebfe6dcb8fba2e99067e24560d7f200c4c6a47 modern.go

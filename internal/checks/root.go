@@ -28,9 +28,9 @@ var rootStrays = []struct{ name, msg, repair string }{
 		repair: "git rm ROADMAP.md, or git mv ROADMAP.md docs/ROADMAP.md while the repo still reads it",
 	},
 	{
-		name:   "conform.json",
+		name:   "repo-standard.json",
 		msg:    "repo-level declarations live under docs/ — the root is minimal",
-		repair: "git mv conform.json " + ValuesFile,
+		repair: "git mv repo-standard.json " + ValuesFile,
 	},
 	{
 		name:   "NORTH_STAR.md",

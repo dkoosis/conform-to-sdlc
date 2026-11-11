@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 func TestLintPin(t *testing.T) {
@@ -61,6 +61,16 @@ func TestRetiredFiles(t *testing.T) {
 
 	clean := writeRepo(t, map[string]string{"scripts/lint-locked": "#!/bin/sh\n"})
 	assertOneOrClean(t, checks.CheckRetiredFiles(clean), checks.RuleRetiredFiles, "")
+}
+
+func TestRetiredFiles_RenamedExceptionsFile(t *testing.T) {
+	t.Parallel()
+
+	dir := writeRepo(t, map[string]string{"docs/conform.json": "{}\n"})
+	got := checks.CheckRetiredFiles(dir)
+	if len(got) != 1 || got[0].File != "docs/conform.json" || got[0].Repair != "git mv docs/conform.json docs/repo-standard.json" {
+		t.Errorf("want one finding naming the rename, got %v", got)
+	}
 }
 
 func TestHooksShape(t *testing.T) {

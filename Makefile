@@ -1,4 +1,4 @@
-# conform-to-sdlc Makefile — strict QA gates, fleet pattern (reference: ~/Projects/ferret).
+# repo-standard Makefile — strict QA gates, fleet pattern (reference: ~/Projects/ferret).
 #
 # Primary: check (vet+lint+test+build) | audit (check+race+fuzz+dupe+nilcheck+deadcode+vuln)
 
@@ -19,7 +19,7 @@ include .sandbox/lib/Makefile.cross.mk
 # waiting, which cascades across parallel sessions/worktrees).
 GOLANGCILINT := bash scripts/lint-locked
 
-# 12-char rev stamped into the binary at install time; `conform-to-sdlc version`
+# 12-char rev stamped into the binary at install time; `repo-standard version`
 # prints it. A plain `go build` with no ldflags leaves main.version at its
 # "unknown" default.
 VERSION := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
@@ -35,7 +35,7 @@ help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_.-]+:.*?## / { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@printf '\n'
 
-check: vet lint test build selfcheck ## Fast validation: vet + lint + test + build + conform-to-sdlc on itself
+check: vet lint test build standard ## Fast validation: vet + lint + test + build + repo-standard on itself
 	@echo "=== check pass ==="
 
 audit: check race fuzz dupe nilcheck deadcode vuln ## Exhaustive validation
@@ -57,17 +57,17 @@ race: ## Run tests with race detector (fresh run)
 build: ## Compile everything
 	go build ./...
 
-# Dogfood (cfm-1e1.7): conform-to-sdlc is fleet repo #14 and gates itself, or it is
+# Dogfood (cfm-1e1.7): repo-standard is fleet repo #14 and gates itself, or it is
 # the unwatched watcher — the exact L4 failure it exists to kill.
-selfcheck: ## Run conform-to-sdlc against this repo (dogfood gate)
-	go run ./cmd/conform-to-sdlc
+standard: ## Run repo-standard against this repo (dogfood gate)
+	go run ./cmd/repo-standard
 
 # doctor's core steps come from .sandbox/lib/Makefile.doctor.mk (shared,
-# byte-identical fleet-wide); wiring conform-to-sdlc --local in as an extra prereq
+# byte-identical fleet-wide); wiring repo-standard --local in as an extra prereq
 # keeps the lib untouched (cfm-1e1.3).
-doctor: selfcheck-local ## Machine doctor (sandbox lib) + conform-to-sdlc --local
-selfcheck-local: ## Run conform-to-sdlc --local (machine wiring: hooksPath, bd hooks, live bd config)
-	go run ./cmd/conform-to-sdlc --local
+doctor: standard-local ## Machine doctor (sandbox lib) + repo-standard --local
+standard-local: ## Run repo-standard --local (machine wiring: hooksPath, bd hooks, live bd config)
+	go run ./cmd/repo-standard --local
 
 vuln: ## Scan for known vulnerabilities (govulncheck, pinned)
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VER) ./...
@@ -79,7 +79,7 @@ dupe: ## Check for code duplication (jscpd, pinned)
 	TMP_JSCPD=$$(mktemp -d); npx --yes jscpd@$(JSCPD_VER) . --ignore "**/.git/**,**/.sandbox/**,**/.beads/**" --output $$TMP_JSCPD; rm -rf $$TMP_JSCPD
 
 nilcheck: ## Run nilaway (pinned)
-	go run go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VER) -include-pkgs=github.com/dkoosis/conform-to-sdlc ./...
+	go run go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VER) -include-pkgs=github.com/dkoosis/repo-standard ./...
 
 # Runs each Fuzz function it finds, FUZZTIME apiece.
 FUZZTIME ?= 10s
@@ -96,32 +96,32 @@ fuzz: ## Fuzz every Fuzz test (FUZZTIME=10s each)
 # so the target fails on any output.
 DEADCODE_VER ?= v0.52.0
 deadcode: ## Fail on any function unreachable from main (deadcode)
-	@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/conform-to-sdlc) || { echo "deadcode: could not run"; exit 1; }; \
+	@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/repo-standard) || { echo "deadcode: could not run"; exit 1; }; \
 	if [ -n "$$out" ]; then echo "$$out"; echo "deadcode: the functions above are unreachable; cut them"; exit 1; fi
 
 ## doctor target provided by .sandbox/lib/Makefile.doctor.mk (project.conf-driven)
 ## cross / cross-amd64 / cross-arm64 provided by .sandbox/lib/Makefile.cross.mk
 
-install: ## Install conform-to-sdlc to GOBIN, else GOPATH/bin (version-stamped)
-	go install -ldflags "$(LDFLAGS)" ./cmd/conform-to-sdlc
+install: ## Install repo-standard to GOBIN, else GOPATH/bin (version-stamped)
+	go install -ldflags "$(LDFLAGS)" ./cmd/repo-standard
 
 # go install writes to GOBIN when set, else the first GOPATH entry's bin.
-deploy: build install ## Build, then install conform-to-sdlc to GOBIN or GOPATH/bin
+deploy: build install ## Build, then install repo-standard to GOBIN or GOPATH/bin
 	@bindir="$$(go env GOBIN)"; \
 	[ -n "$$bindir" ] || bindir="$$(go env GOPATH | cut -d: -f1)/bin"; \
-	fresh="$$bindir/conform-to-sdlc"; \
-	echo "=== deployed (conform-to-sdlc installed to $$bindir) ==="; \
-	active="$$(command -v conform-to-sdlc 2>/dev/null || true)"; \
+	fresh="$$bindir/repo-standard"; \
+	echo "=== deployed (repo-standard installed to $$bindir) ==="; \
+	active="$$(command -v repo-standard 2>/dev/null || true)"; \
 	if [ -n "$$active" ] && ! [ "$$active" -ef "$$fresh" ]; then \
 		echo "warning: PATH runs $$active, not the fresh $$fresh; the stale copy shadows this deploy"; \
 	fi
 
 clean: ## Remove built binary + sandbox build artifacts
-	@rm -f conform-to-sdlc
+	@rm -f repo-standard
 	@rm -rf .sandbox/bin/linux-amd64 .sandbox/bin/linux-arm64 .sandbox/cache
 	@echo "=== clean ==="
 
-# The lint rules pack is embedded (internal/lintpack/_gorules) and selfcheck's
+# The lint rules pack is embedded (internal/lintpack/_gorules) and standard's
 # lint-pack rule compares .golangci-rules/ with it, offline. To take a new pack,
 # commit it to dkoosis/lintbrush, then run this against that checkout.
 LINTBRUSH ?= $(HOME)/Projects/dk/lintbrush

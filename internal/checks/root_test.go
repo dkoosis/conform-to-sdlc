@@ -3,7 +3,7 @@ package checks_test
 import (
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // TestRootMinimal_CleanRootPasses: the reference repo keeps its declarations

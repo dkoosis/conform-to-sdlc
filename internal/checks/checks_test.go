@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // TestRun_ConformingRepo: a repo satisfying the whole Surface-1 contract
@@ -20,7 +20,7 @@ func TestRun_ConformingRepo(t *testing.T) {
 	}
 }
 
-// TestRun_MissingValuesFile: no conform.json is itself a finding, and the
+// TestRun_MissingValuesFile: no repo-standard.json is itself a finding, and the
 // remaining checks still run under the default tool profile.
 func TestRun_MissingValuesFile(t *testing.T) {
 	files := goodRepo()
@@ -54,7 +54,7 @@ func TestRun_InvalidValuesFile(t *testing.T) {
 	if msg == "" {
 		t.Fatalf("want a %s finding, got %v", checks.RuleValuesFile, findings)
 	}
-	for _, part := range []string{"docs/conform.json", `rule "x"`, "reason"} {
+	for _, part := range []string{"docs/repo-standard.json", `rule "x"`, "reason"} {
 		if !strings.Contains(msg, part) {
 			t.Errorf("finding message %q should name %q", msg, part)
 		}
@@ -87,11 +87,11 @@ func TestRun_ExceptionSuppressesFinding(t *testing.T) {
 }
 
 // TestRun_LegacyValuesFileStillHonored: a repo that has not yet moved its
-// conform.json under docs/ keeps its declared exceptions.
+// repo-standard.json under docs/ keeps its declared exceptions.
 //
 // This is the migration's whole risk. Five of seven fleet repos declare at the
-// root, and a cutover that read only docs/conform.json would drop their
-// exceptions the next time conform-to-sdlc ran — every rule they had excused firing at
+// root, and a cutover that read only docs/repo-standard.json would drop their
+// exceptions the next time repo-standard ran — every rule they had excused firing at
 // once, with the one finding that explains why buried among them. Read the
 // root copy, and report it as a root-minimal stray: the repo keeps working and
 // still learns it must move.
@@ -108,11 +108,11 @@ func TestRun_LegacyValuesFileStillHonored(t *testing.T) {
 
 	findings := checks.Run(dir)
 	if n := rulesOf(findings)[checks.RuleCodexShape]; n != 0 {
-		t.Errorf("root conform.json exception ignored: %d finding(s): %v", n, findings)
+		t.Errorf("root repo-standard.json exception ignored: %d finding(s): %v", n, findings)
 	}
 	// The root copy is read, not blessed: it is still a stray to move.
 	if n := rulesOf(findings)[checks.RuleRootMinimal]; n == 0 {
-		t.Error("root conform.json produced no root-minimal finding")
+		t.Error("root repo-standard.json produced no root-minimal finding")
 	}
 	// And it must not ALSO be reported as a missing values file.
 	if n := rulesOf(findings)[checks.RuleValuesFile]; n != 0 {
@@ -120,7 +120,7 @@ func TestRun_LegacyValuesFileStillHonored(t *testing.T) {
 	}
 }
 
-// TestRun_InvalidDocsValuesFileDoesNotFallBack: a docs/conform.json that is
+// TestRun_InvalidDocsValuesFileDoesNotFallBack: a docs/repo-standard.json that is
 // present but broken is reported as broken. Quietly using the root copy instead
 // would hide the typo behind stale values — the fallback covers a file that is
 // missing, never one that is wrong.
@@ -131,7 +131,7 @@ func TestRun_InvalidDocsValuesFileDoesNotFallBack(t *testing.T) {
 	dir := writeRepo(t, files)
 
 	if n := rulesOf(checks.Run(dir))[checks.RuleValuesFile]; n == 0 {
-		t.Error("invalid docs/conform.json was masked by the root fallback")
+		t.Error("invalid docs/repo-standard.json was masked by the root fallback")
 	}
 }
 

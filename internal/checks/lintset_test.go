@@ -11,8 +11,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
-	"github.com/dkoosis/conform-to-sdlc/internal/values"
+	"github.com/dkoosis/repo-standard/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/values"
 )
 
 // lintSetFindings runs the whole check and keeps the lint-set findings, so a
@@ -208,7 +208,7 @@ func TestLintSet(t *testing.T) {
 			files := goodRepo()
 			files[".golangci.yml"] = tt.golangc
 			if tt.values != "" {
-				files["docs/conform.json"] = tt.values + "\n"
+				files["docs/repo-standard.json"] = tt.values + "\n"
 			}
 			got := lintSetFindings(t, files, tt.also)
 			if len(got) != len(tt.want) {

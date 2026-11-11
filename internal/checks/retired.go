@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// retiredFiles are per-repo files whose job conform-to-sdlc absorbed or whose
+// retiredFiles are per-repo files whose job repo-standard absorbed or whose
 // existence is a live footgun. Presence is a finding; the gate stays red
 // until the file is gone (retired-files).
 //
@@ -24,15 +24,32 @@ var retiredFiles = []string{
 	"scripts/scaffold-codex-review.sh",
 }
 
-// checkRetiredFiles reports any retired file still present.
+// renamedFiles are files this tool read under its old name, conform-to-sdlc.
+// A repo that still has the old file would otherwise lose its exceptions
+// without a word; presence is a finding that names the rename.
+var renamedFiles = map[string]string{
+	"docs/conform.json": "docs/repo-standard.json",
+}
+
+// checkRetiredFiles reports any retired or renamed file still present.
 func checkRetiredFiles(dir string) []Finding {
 	var findings []Finding
+	for old, now := range renamedFiles {
+		if _, err := os.Stat(filepath.Join(dir, old)); err == nil {
+			findings = append(findings, Finding{
+				File:   old,
+				Rule:   RuleRetiredFiles,
+				Msg:    "renamed — the tool is now repo-standard and reads " + now + "; the old file is ignored",
+				Repair: fmt.Sprintf("git mv %s %s", old, now),
+			})
+		}
+	}
 	for _, rel := range retiredFiles {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err == nil {
 			findings = append(findings, Finding{
 				File:   rel,
 				Rule:   RuleRetiredFiles,
-				Msg:    "retired fleet-wide — its job moved into conform-to-sdlc; a soft-fail gate left in place reads as protection and provides none",
+				Msg:    "retired fleet-wide — its job moved into repo-standard; a soft-fail gate left in place reads as protection and provides none",
 				Repair: fmt.Sprintf("git rm %s (and drop any Makefile/CI references)", rel),
 			})
 		}

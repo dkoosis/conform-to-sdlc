@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // withRecipe replaces the one-line "name: ## doc" stub in goodMakefile with a

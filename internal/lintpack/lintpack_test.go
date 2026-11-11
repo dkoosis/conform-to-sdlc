@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/lintpack"
+	"github.com/dkoosis/repo-standard/internal/lintpack"
 )
 
 // gitBlobID is the id git gives a file's content: SHA-1 over a header and the
