@@ -27,11 +27,13 @@ func gateFindings(t *testing.T, mk, conf string) []checks.Finding {
 func TestGateSkip_Fails(t *testing.T) {
 	t.Parallel()
 	skips := map[string]string{
-		"negated if, echo only": "\t@if ! command -v nilaway >/dev/null 2>&1; then \\\n\t\techo \"nilaway not installed — skipped\"; \\\n\telse \\\n\t\tgo run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; \\\n\tfi\n",
-		"negated if, exit 0":    "\t@if ! command -v nilaway >/dev/null 2>&1; then \\\n\t\techo skipped; exit 0; \\\n\tfi\n",
-		"positive if, no else":  "\t@if command -v nilaway >/dev/null 2>&1; then \\\n\t\tgo run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; \\\n\tfi\n",
-		"or-branch":             "\t@command -v nilaway >/dev/null || echo skipped\n",
-		"and-run":               "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...\n",
+		"negated if, echo only":      "\t@if ! command -v nilaway >/dev/null 2>&1; then \\\n\t\techo \"nilaway not installed — skipped\"; \\\n\telse \\\n\t\tgo run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; \\\n\tfi\n",
+		"negated if, exit 0":         "\t@if ! command -v nilaway >/dev/null 2>&1; then \\\n\t\techo skipped; exit 0; \\\n\tfi\n",
+		"positive if, no else":       "\t@if command -v nilaway >/dev/null 2>&1; then \\\n\t\tgo run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; \\\n\tfi\n",
+		"silent if, later loud else": "\t@if command -v nilaway >/dev/null 2>&1; then \\\n\t\tgo run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...; \\\n\tfi; \\\n\tif [ -f go.sum ]; then :; else echo no go.sum >&2; exit 1; fi\n",
+		"silent and-or, later exit":  "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./... || echo skipped; \\\n\ttest -f go.sum || exit 1\n",
+		"or-branch":                  "\t@command -v nilaway >/dev/null || echo skipped\n",
+		"and-run":                    "\t@command -v nilaway >/dev/null 2>&1 && go run go.uber.org/nilaway/cmd/nilaway@v1.0.0 ./...\n",
 	}
 	for name, recipe := range skips {
 		t.Run(name, func(t *testing.T) {

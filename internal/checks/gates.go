@@ -217,44 +217,169 @@ func dedupe(in []Finding) []Finding {
 }
 
 // skipFindings flags a command whose missing-tool branch does not exit
-// non-zero: `if ! command -v T; then <skip> fi`, the else of `if command -v
-// T`, `command -v T || <skip>`, and `command -v T && run`.
+// non-zero. It reads each `if … fi` block on its own (the then or else the
+// presence test selects), then the statements outside any block.
 func skipFindings(target string, cmd recipeCmd) []Finding {
+	text := blankQuotes(cmd.text)
+	blocks := ifBlocks(text)
+	rest := blankBlocks(text, blocks)
+
 	var findings []Finding
 	for _, tool := range gateTools {
-		t := regexp.QuoteMeta(tool)
-		type shape struct {
-			re      *regexp.Regexp
-			missing int // submatch holding the missing-tool branch; 0 = none exists
-		}
-		shapes := []shape{
-			{regexp.MustCompile(`(?s)if\s+!\s*` + lookup + t + `\b[^;]*;\s*then\b(.*?)(?:\belse\b|\bfi\b)`), 1},
-			{regexp.MustCompile(`(?s)if\s+` + lookup + t + `\b[^;]*;\s*then\b.*?\belse\b(.*?)\bfi\b`), 1},
-			{regexp.MustCompile(`(?s)if\s+` + lookup + t + `\b[^;]*;\s*then\b.*?\bfi\b`), 0},
-			{regexp.MustCompile(`(?s)` + lookup + t + `\b[^|;]*\|\|(.*)`), 1},
-			{regexp.MustCompile(lookup + t + `\b(?:[^|;&]|>&\d)*&&`), 0},
-		}
-		for _, s := range shapes {
-			if m := s.re.FindStringSubmatchIndex(cmd.text); m != nil {
-				branch := ""
-				if s.missing > 0 {
-					branch = cmd.text[m[2*s.missing]:m[2*s.missing+1]]
-				}
-				if missingExit.MatchString(branch) {
-					break // the first shape that matches decides; a loud branch passes
-				}
-				findings = append(findings, Finding{
-					File: makefileFile,
-					Rule: RuleGateSkip,
-					Msg: fmt.Sprintf("target %q, line %d: %s missing passes the step — a green gate must mean %s ran",
-						target, cmd.lineAt(m[0]), tool, tool),
-					Repair: fmt.Sprintf("delete the presence test and run the pinned form (go run <pkg>@$(%s_VER) or npx), or make the missing branch print to stderr and `exit 1`", strings.ToUpper(strings.ReplaceAll(tool, "-", ""))),
-				})
-				break
-			}
+		look := regexp.MustCompile(lookup + regexp.QuoteMeta(tool) + `\b`)
+		for _, at := range append(blockSkips(text, blocks, look), statementSkips(rest, look)...) {
+			findings = append(findings, Finding{
+				File: makefileFile,
+				Rule: RuleGateSkip,
+				Msg: fmt.Sprintf("target %q, line %d: %s missing passes the step — a green gate must mean %s ran",
+					target, cmd.lineAt(at), tool, tool),
+				Repair: fmt.Sprintf("delete the presence test and run the pinned form (go run <pkg>@$(%s_VER) or npx), or make the missing branch print to stderr and `exit 1`", verKey(tool)),
+			})
 		}
 	}
 	return findings
+}
+
+// blankBlocks blanks every if block, so the statements left are the ones
+// outside any block.
+func blankBlocks(text string, blocks []ifBlock) string {
+	rest := []byte(text)
+	for _, b := range blocks {
+		for i := b.start; i < b.end; i++ {
+			if rest[i] != '\n' {
+				rest[i] = ' '
+			}
+		}
+	}
+	return string(rest)
+}
+
+// blockSkips returns the offset of each if block whose presence test for the
+// tool selects a branch that does not exit non-zero.
+func blockSkips(text string, blocks []ifBlock, look *regexp.Regexp) []int {
+	var at []int
+	for _, b := range blocks {
+		cond := text[b.start:b.thenAt]
+		loc := look.FindStringIndex(cond)
+		if loc == nil {
+			continue
+		}
+		missing := b.elseBody(text)
+		if negatedTest.MatchString(cond[:loc[0]]) {
+			missing = b.thenBody(text)
+		}
+		if !missingExit.MatchString(missing) {
+			at = append(at, b.start)
+		}
+	}
+	return at
+}
+
+// statementSkips returns the offset of each statement outside an if block
+// whose presence test lets a missing tool pass: `T || <not exit>`, or `T &&
+// run` with no `||` after it.
+func statementSkips(rest string, look *regexp.Regexp) []int {
+	var at []int
+	for _, st := range statements(rest) {
+		loc := look.FindStringIndex(st.text)
+		if loc == nil {
+			continue
+		}
+		after := st.text[loc[1]:]
+		i := strings.Index(after, "||")
+		silent := i < 0 && strings.Contains(after, "&&")
+		if i >= 0 {
+			silent = !missingExit.MatchString(after[i:])
+		}
+		if silent {
+			at = append(at, st.at+loc[0])
+		}
+	}
+	return at
+}
+
+var (
+	negatedTest = regexp.MustCompile(`!\s*$`)
+	ifKeyword   = regexp.MustCompile(`(?:^|[\s;{(@+-])(if|then|else|elif|fi)(?:[\s;)}]|$)`)
+)
+
+// blankQuotes replaces each quoted string with blanks, keeping newlines so
+// line numbers survive.
+func blankQuotes(s string) string {
+	return quoted.ReplaceAllStringFunc(s, func(q string) string {
+		return " " + strings.Repeat("\n", strings.Count(q, "\n")) + " "
+	})
+}
+
+// ifBlock is one `if … fi`: byte offsets of the if, its then and else
+// keywords (elseAt is -1 with no else), and the end of its fi.
+type ifBlock struct{ start, thenAt, elseAt, end int }
+
+func (b ifBlock) thenBody(text string) string {
+	if b.elseAt >= 0 {
+		return text[b.thenAt:b.elseAt]
+	}
+	return text[b.thenAt : b.end-2]
+}
+
+func (b ifBlock) elseBody(text string) string {
+	if b.elseAt < 0 {
+		return ""
+	}
+	return text[b.elseAt : b.end-2]
+}
+
+// ifBlocks finds every if … fi block, nested ones included.
+func ifBlocks(text string) []ifBlock {
+	var stack, out []ifBlock
+	for _, m := range ifKeyword.FindAllStringSubmatchIndex(text, -1) {
+		kw, at := text[m[2]:m[3]], m[2]
+		if kw == "if" {
+			stack = append(stack, ifBlock{start: at, thenAt: -1, elseAt: -1})
+			continue
+		}
+		n := len(stack)
+		if n == 0 {
+			continue
+		}
+		top := &stack[n-1]
+		switch {
+		case kw == "then" && top.thenAt < 0:
+			top.thenAt = at
+		case (kw == "else" || kw == "elif") && top.elseAt < 0:
+			top.elseAt = at
+		case kw == "fi":
+			top.end = at + 2
+			if top.thenAt >= 0 {
+				out = append(out, *top)
+			}
+			stack = stack[:n-1]
+		}
+	}
+	return out
+}
+
+type statement struct {
+	at   int
+	text string
+}
+
+// statements splits shell text on ; and newlines outside braces.
+func statements(text string) []statement {
+	var out []statement
+	depth, from := 0, 0
+	for i, r := range text {
+		switch {
+		case r == '{':
+			depth++
+		case r == '}':
+			depth = max(depth-1, 0)
+		case (r == ';' || r == '\n') && depth == 0:
+			out = append(out, statement{from, text[from:i]})
+			from = i + 1
+		}
+	}
+	return append(out, statement{from, text[from:]})
 }
 
 // pinFindings flags a known tool that runs at no fixed version.
@@ -270,9 +395,7 @@ func pinFindings(target string, cmd recipeCmd, vars map[string]makeVar, conf map
 		})
 	}
 
-	text := quoted.ReplaceAllStringFunc(cmd.text, func(q string) string {
-		return strings.Repeat(" ", strings.Count(q, "\n")) // keep line numbers
-	})
+	text := blankQuotes(cmd.text)
 	for _, m := range versioned.FindAllStringSubmatchIndex(text, -1) {
 		tool, ver := text[m[2]:m[3]], text[m[4]:m[5]]
 		if why := unpinned(ver, vars, conf); why != "" {
