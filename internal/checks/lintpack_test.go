@@ -416,8 +416,12 @@ func TestFix_AtomicfileRepoPassesLintPack(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/app\n\nrequire github.com/dkoosis/atomicfile v0.3.1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := checks.Fix(dir); err != nil {
+	done, err := checks.Fix(dir)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if msg := strings.Join(done, "\n"); !strings.Contains(msg, "rules: \"${base-path}/.golangci-rules/bugclasses.go,${base-path}/.golangci-rules/modern.go,${base-path}/.golangci-rules/optin_rawstatewrite.go\"") {
+		t.Errorf("--fix's pack message omits the raw-write file: %s", msg)
 	}
 	if _, err := os.Stat(filepath.Join(dir, lintpack.Dir, "optin_rawstatewrite.go")); err != nil {
 		t.Errorf("--fix did not write optin_rawstatewrite.go: %v", err)
