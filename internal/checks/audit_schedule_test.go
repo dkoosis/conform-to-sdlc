@@ -32,6 +32,7 @@ func TestAuditSchedule_Fails(t *testing.T) {
 		"job guarded off the schedule":   {"audit.yml": strings.Replace(goodAuditYML, "    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    if: github.event_name != 'schedule'\n", 1)},
 		"unspaced negation":              {"audit.yml": strings.Replace(goodAuditYML, "      - run: make audit\n", "      - run: make audit\n        if: github.event_name!='schedule'\n", 1)},
 		"negated equality":               {"audit.yml": strings.Replace(goodAuditYML, "      - run: make audit\n", "      - run: make audit\n        if: \"!(github.event_name == 'schedule')\"\n", 1)},
+		"step disabled with if false":    {"audit.yml": strings.Replace(goodAuditYML, "      - run: make audit\n", "      - run: make audit\n        if: ${{ false }}\n", 1)},
 		"a different target":             {"audit.yml": strings.Replace(goodAuditYML, "make audit", "make check-audit", 1)},
 		"schedule with no cron":          {"audit.yml": "name: a\non:\n  schedule: []\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: make audit\n"},
 	}
@@ -54,6 +55,7 @@ func TestAuditSchedule_Passes(t *testing.T) {
 		"check workflow with a scheduled audit step": {"check.yml": "name: check\non:\n  push:\n  schedule:\n    - cron: '17 9 * * *'\n  workflow_dispatch:\njobs:\n  check:\n    runs-on: x\n    steps:\n      - run: make check\n        if: github.event_name == 'push'\n      - run: make audit # daily\n        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'\n"},
 		"make flags before the target":               {"audit.yml": strings.Replace(goodAuditYML, "make audit", "make -o latency audit", 1)},
 		"guard that never tests the event":           {"audit.yml": strings.Replace(goodAuditYML, "      - run: make audit\n", "      - run: make audit\n        if: github.repository == 'o/r'\n", 1)},
+		"guard that excludes another event":          {"audit.yml": strings.Replace(goodAuditYML, "      - run: make audit\n", "      - run: make audit\n        if: github.event_name != 'pull_request'\n", 1)},
 		"yaml extension":                             {"nightly.yaml": goodAuditYML},
 	}
 	for name, wfs := range tests {
