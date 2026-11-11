@@ -10,15 +10,17 @@ import (
 // existence is a live footgun. Presence is a finding; the gate stays red
 // until the file is gone (retired-files).
 //
-//   - check-pack-drift.sh soft-failed by design (private upstream → guaranteed
-//     no-op in 7 of 8 repos). A rule that cannot fail is worse than an absent
-//     rule; drift-guarding the bugclasses pack is conform-to-sdlc's job now.
+//   - check-pack-drift.sh soft-failed by design (its upstream in cc-plugins is
+//     gone; the script warns and exits 0). A
+//     rule that cannot fail is worse than an absent rule; lint-pack guards the
+//     pack now, offline. Repos kept it under scripts/ or .golangci-rules/.
 //   - scaffold-codex-review.sh emits an auto-fire pull_request trigger — a
 //     re-run is surprise OpenAI spend (the deployed workflows are
 //     issue_comment). The codex-workflow rule owns the shape; the scaffolder
 //     must not exist where it can be re-run.
 var retiredFiles = []string{
 	"scripts/check-pack-drift.sh",
+	".golangci-rules/check-pack-drift.sh",
 	"scripts/scaffold-codex-review.sh",
 }
 

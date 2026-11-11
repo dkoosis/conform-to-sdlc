@@ -1,0 +1,69 @@
+# bugclasses pack — golangci-lint v2 wiring (decision nug d7ea466a8172).
+# Merge these blocks into a repo's .golangci.yml. Covers 5 of the 6 rules;
+# rule 3 (omitempty-scalar) is a standalone analyzer — see README §rule 3.
+#
+# RULE → surface:
+#   1 scanner-buffer    → gocritic/ruleguard  (on)
+#   2 raw-state-write   → gocritic/ruleguard  (OFF: excluded from the rules glob)
+#   4 err-substring     → gocritic/ruleguard  (on)
+#   5 context-in-daemon → forbidigo           (PATH-SCOPED per repo — see below)
+#   6 pid-liveness      → gocritic/ruleguard  (on)
+#
+# PREREQUISITES in the consuming repo:
+#   1. Copy the pack's *.go rule files into .golangci-rules/ (rules.go →
+#      bugclasses.go; keep optin_rawstatewrite.go alongside if adopting rule 2).
+#   2. Make the ruleguard DSL importable so gocritic can typecheck the rules
+#      file. Add a build-tagged tools.go and `go mod tidy`:
+#         //go:build tools
+#         package tools
+#         import _ "github.com/quasilyte/go-ruleguard/dsl"
+#      (Never compiled into your binary; the tag keeps it out of normal builds.)
+#   3. Guard against pack drift. The copy in step 1 rots when upstream fixes a
+#      rule. Vendor check-pack-drift.sh from the pack and run it in CI after
+#      golangci-lint — it compares your copy's //pack:version + content hash
+#      against upstream and fails on a mismatch (network-soft):
+#         .golangci-rules/check-pack-drift.sh .golangci-rules/bugclasses.go
+#      Override upstream with PACK_UPSTREAM_URL (e.g. pin to a tag, not main).
+
+version: "2"
+
+linters:
+  enable:
+    - gocritic
+    - forbidigo
+
+  settings:
+    gocritic:
+      enabled-checks:
+        - ruleguard
+      settings:
+        ruleguard:
+          # ${base-path} = the .golangci.yml directory (golangci-lint v2).
+          # Rule 2 is OFF here: the glob names only bugclasses.go. To enable
+          # it after adopting dkoosis/atomicfile, widen to the directory glob:
+          #   rules: "${base-path}/.golangci-rules/*.go"
+          rules: "${base-path}/.golangci-rules/bugclasses.go"
+          # Fail the run on rule-compile errors, don't silently skip them.
+          failOn: dsl
+
+    forbidigo:
+      # Rule 5: context.Background() deep in daemon code should thread the
+      # caller/shutdown ctx (strand st-47z,
+      # canapay can-x38). Types-aware so a `ctx.Background` field can't false-fire.
+      analyze-types: true
+      forbid:
+        - pattern: '^context\.Background$'
+          msg: "thread the caller/shutdown ctx; context.Background belongs only at a daemon's root (main/startup)"
+
+  exclusions:
+    rules:
+      # forbidigo's Background ban is noise everywhere EXCEPT long-lived
+      # daemon/server packages. Scope it to THIS repo's layout: list the
+      # non-daemon paths where a fresh root context is legitimate. Tune the
+      # path regex — these are common defaults, not a universal answer.
+      # NOTE: golangci reports module-root-relative paths with NO leading
+      # slash, so match cmd/ with `(^|/)cmd/`, never `/cmd/` — the latter
+      # silently misses top-level cmd/foo/*.go (bit ferret).
+      - linters: [forbidigo]
+        path: '(_test\.go$|(^|/)cmd/|(^|/)main\.go$)'
+        text: 'context\.Background'

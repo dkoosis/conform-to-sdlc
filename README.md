@@ -11,16 +11,20 @@ Three surfaces, because the three kinds of state live in three places:
 
 | surface | sees | runs |
 |---|---|---|
-| `conform-to-sdlc` | in-repo files: Makefile verbs, `.golangci.yml` core, single pin, CI-calls-make-check behind a docs-only skip, bd config | every `make check`, hard-fail |
+| `conform-to-sdlc` | in-repo files: Makefile verbs, `.golangci.yml` core, `.golangci-rules/` byte-equal to the lintbrush pack it embeds, single pin, CI-calls-make-check behind a docs-only skip, bd config | every `make check`, hard-fail |
 | `conform-to-sdlc --local` | machine wiring CI can't see: `core.hooksPath`, hooks executable, dolt remote | `make doctor`, session start |
 | `conform-to-sdlc --fleet` | GitHub: branch protection, labels, merge policy | promulgation + pin-bump sweeps |
 | `conform-to-sdlc --fix` | the same in-repo files, but writes the ones that are simply absent, then checks | adopting a new rule; scaffolding |
+| `conform-to-sdlc pack sync` | `.golangci-rules/`: rewrites the lintbrush pack files from the embedded copy | the repair lint-pack names |
 
 Principles:
 
 - **Never soft-fail.** A rule too noisy to hard-fail gets deleted, not warned.
 - **Semantic comparison, not bytes.** The lint core is a parsed set; byte-diffing
-  YAML makes rules noisy.
+  YAML makes rules noisy. The lint rules pack is the exception: it is Go source
+  shipped whole, so lint-pack compares it byte for byte. Its canon is
+  dkoosis/lintbrush `gorules/`; `make pack-refresh` copies a lintbrush commit
+  into the embed, and a conform-to-sdlc release carries it to the fleet.
 - **Failures name file, rule, repair command.**
 - **<1s** for the in-`check` surface, or it gets bypassed.
 - **Dogfooded.** This repo's CI runs conform-to-sdlc on itself.

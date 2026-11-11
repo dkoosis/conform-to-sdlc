@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# pack-refresh — copy the lintbrush rules pack into conform-to-sdlc's embed.
+#
+# usage: scripts/pack-refresh <lintbrush checkout>
+#
+# Reads each pack file from the checkout's HEAD commit (never the working
+# tree, so an uncommitted edit cannot ship), writes it under
+# internal/lintpack/_gorules/, and records the commit and each file's git blob
+# id in _gorules/SOURCE. lintpack's tests fail when an embedded file's blob id
+# disagrees with SOURCE, so a hand edit to the embed is caught. Then it syncs
+# this repo's own .golangci-rules/ from the new embed.
+set -euo pipefail
+
+src="${1:?usage: scripts/pack-refresh <lintbrush checkout>}"
+dest="internal/lintpack/_gorules"
+files=(rules.go modern.go optin_rawstatewrite.go golangci.snippet.yml golangci.baseline.yml)
+
+commit="$(git -C "$src" rev-parse HEAD)"
+if ! git -C "$src" diff --quiet HEAD -- gorules; then
+	echo "pack-refresh: $src has uncommitted changes under gorules/; commit them to lintbrush first" >&2
+	exit 1
+fi
+
+mkdir -p "$dest"
+{
+	echo "# The lintbrush rules pack conform-to-sdlc embeds. Written by make pack-refresh; do not edit."
+	echo "commit $commit"
+	for f in "${files[@]}"; do
+		git -C "$src" show "$commit:gorules/$f" >"$dest/$f"
+		echo "$(git -C "$src" rev-parse "$commit:gorules/$f") $f"
+	done
+} >"$dest/SOURCE"
+
+go run ./cmd/conform-to-sdlc pack sync
+echo "pack-refresh: embedded lintbrush gorules at ${commit:0:12}"

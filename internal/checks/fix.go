@@ -1,11 +1,14 @@
 package checks
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/dkoosis/conform-to-sdlc/internal/lintpack"
 )
 
 // Fix applies the Surface-1 repairs conform-to-sdlc can make without judgment, and
@@ -20,20 +23,42 @@ import (
 //
 // Fix never overwrites, so running it twice is safe and the second run is
 // silent.
+//
+// One repair failing does not stop the others: each touches its own file, and
+// the errors come back joined.
 func Fix(dir string) ([]string, error) {
-	var done []string
+	var (
+		done []string
+		errs []error
+	)
 
-	for _, fix := range []func(string) (string, error){fixReadme, fixCheckWorkflow} {
+	for _, fix := range []func(string) (string, error){fixReadme, fixCheckWorkflow, fixLintPack} {
 		created, err := fix(dir)
 		if err != nil {
-			return done, err
+			errs = append(errs, err)
+			continue
 		}
 		if created != "" {
 			done = append(done, created)
 		}
 	}
 
-	return done, nil
+	return done, errors.Join(errs...)
+}
+
+// fixLintPack writes the required lintbrush pack files when the repo has no
+// .golangci-rules/ at all. A present directory is never touched, even when a
+// file in it differs or is missing: the file may hold a person's edit, and
+// lint-pack names it with the repair to run.
+func fixLintPack(dir string) (string, error) {
+	created, err := lintpack.Create(dir)
+	if err != nil {
+		return "", fmt.Errorf("write %s: %w", lintpack.Dir, err)
+	}
+	if !created {
+		return "", nil
+	}
+	return fmt.Sprintf(`created %s — the lintbrush rules pack conform-to-sdlc ships; enable gocritic's ruleguard check in .golangci.yml with rules: "${base-path}/.golangci-rules/bugclasses.go,${base-path}/.golangci-rules/modern.go"`, lintpack.Dir), nil
 }
 
 // fixReadme writes a README.md skeleton when the repo root carries none.

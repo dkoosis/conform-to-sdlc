@@ -2,6 +2,7 @@
   "gitignore": true,
   "ignore": [
     "**/.sandbox/**",
+    "**/internal/lintpack/_gorules/**",
     "**/node_modules/**",
     "**/testdata/**",
     "**/*_test.go"
