@@ -78,10 +78,15 @@ Two gates exit 0 in their default form, so a rule reads each recipe:
 - `deadcode-filter`: a deadcode target may filter deadcode's output only for
   functions an exception names, one reason each:
   `{"rule": "deadcode-filter", "allow": {"<function>": "<reason>"}}`. The checker
-  reads the stages after the deadcode run: only `grep -v` with the names written
-  literally in its patterns is verifiable. A filter with no exception, a pattern
-  that names no allowed function, an allowed name the target does not filter, and
-  any other filtering tool (sed, awk, ...) each fail. A plain exception cannot
+  reads the stages the deadcode command feeds (up to `;`, `&&`, `||` or the `)`
+  that closes its `$(...)`; a later `echo "$out" | head` is display, not a
+  filter). Only `grep -v` with each alternative written as
+  `unreachable func: <name>$`, regex metacharacters escaped (`T\.Close`), or the
+  shared form `unreachable func: (A|B)$`, is verifiable. A bare name would hide
+  every function that contains it, and `grep -F` cannot anchor. A filter with no
+  exception, a pattern that is not that form for an allowed name, an allowed name
+  the target does not filter, and any other filtering tool (sed, awk, ...) each
+  fail. A plain exception cannot
   excuse this rule. A filter in a script the target calls is not seen; the rule
   reads the Makefile recipe, so keep the deadcode run there.
 

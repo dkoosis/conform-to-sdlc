@@ -271,7 +271,7 @@ func deadcodeFilterFindings(text, masked string, vals values.Values) []Finding {
 	finding := func(msg, repair string) Finding {
 		return Finding{File: makefileFile, Rule: RuleDeadcodeFilter, Msg: msg, Repair: repair}
 	}
-	add := `add {"rule": "deadcode-filter", "allow": {"<function>": "<reason>"}} to docs/repo-standard.json, one entry per function the filter hides, and write each name literally in a grep -v pattern; or delete the filter and the dead function`
+	add := `add {"rule": "deadcode-filter", "allow": {"<function>": "<reason>"}} to docs/repo-standard.json, one entry per function the filter hides, and write each as 'unreachable func: <name>$' in a grep -v pattern; or delete the filter and the dead function`
 	var findings []Finding
 	for _, tool := range other {
 		findings = append(findings, finding(tool+" filters deadcode's output, and the checker can verify only `grep -v <function names>` against an allow list", "use `grep -v` with literal function names, "+add))
@@ -281,11 +281,11 @@ func deadcodeFilterFindings(text, masked string, vals values.Values) []Finding {
 	}
 	for _, p := range patterns {
 		if len(allowed) > 0 && !namesOnly(p, names) {
-			findings = append(findings, finding(fmt.Sprintf("the deadcode filter pattern %q is not just names from the deadcode-filter allow list joined by |; anything else can hide a function the exception does not record", p), "write the pattern as the allowed function names alone, such as 'hookA|hookB', and list each in the exception's allow, with a reason"))
+			findings = append(findings, finding(fmt.Sprintf("the deadcode filter pattern %q is not just names from the deadcode-filter allow list, each written as `unreachable func: <name>$`; a bare name or a bare -F string also hides every function that contains it", strings.TrimPrefix(p, fixedStringMark)), "write each alternative as `unreachable func: <name>$` with regex metacharacters escaped ('unreachable func: hookA$' or 'unreachable func: (hookA|T\\.Close)$'), and list each name in the exception's allow, with a reason"))
 		}
 	}
 	for _, n := range names {
-		if !slices.ContainsFunc(patterns, func(p string) bool { return strings.Contains(p, n) }) {
+		if !slices.ContainsFunc(patterns, func(p string) bool { return strings.Contains(p, regexp.QuoteMeta(n)) }) {
 			findings = append(findings, finding(fmt.Sprintf("deadcode-filter allows %q, but the deadcode target does not filter it out", n), "delete the stale entry from the exception's allow list"))
 		}
 	}
@@ -295,36 +295,116 @@ func deadcodeFilterFindings(text, masked string, vals values.Values) []Finding {
 // namesOnly says whether pattern p is made of allowed names and alternation
 // punctuation alone: an unlisted name or a wildcard would hide more.
 func namesOnly(p string, names []string) bool {
-	// A grep -E pattern splits on |, a basic one on \|. Each alternative, with
-	// optional anchors and one enclosing group removed, must be one allowed
-	// name; an empty alternative matches every line.
-	p = strings.TrimSpace(p)
-	for _, pair := range [][2]string{{`\(`, `\)`}, {"(", ")"}} {
-		if g, ok := strings.CutPrefix(p, pair[0]); ok {
-			if g, ok = strings.CutSuffix(g, pair[1]); ok {
-				p = g
-				break
+	// deadcode prints "file.go:1:6: unreachable func: <name>". Every
+	// alternative of the pattern (| for grep -E, \| for a basic one) must be
+	// exactly `unreachable func: <name>$` with <name> an allowed name, regex
+	// metacharacters escaped; the shared-prefix form
+	// `unreachable func: (A|B)$` is the same. A bare name matches any line
+	// that contains it, and an empty alternative matches every line.
+	if strings.HasPrefix(p, fixedStringMark) {
+		return false
+	}
+	p = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(p, "$$", "$"), `\|`, "|")) // make's $$ is the shell's $
+	quoted := make(map[string]bool, len(names))
+	for _, n := range names {
+		quoted[regexp.QuoteMeta(n)] = true
+	}
+	exact := true
+	for alt := range strings.SplitSeq(p, "|") {
+		name, ok := strings.CutPrefix(strings.TrimPrefix(strings.TrimSpace(alt), "^"), unreachablePrefix)
+		if name, cut := strings.CutSuffix(name, "$"); !ok || !cut || !quoted[name] {
+			exact = false
+			break
+		}
+	}
+	if exact {
+		return true
+	}
+	group, ok := strings.CutPrefix(strings.TrimPrefix(p, "^"), unreachablePrefix)
+	if !ok {
+		return false
+	}
+	for _, pair := range [][2]string{{`\(`, `\)$`}, {"(", ")$"}} {
+		if inner, ok := strings.CutPrefix(group, pair[0]); ok {
+			if inner, ok = strings.CutSuffix(inner, pair[1]); ok {
+				return allQuoted(inner, quoted)
 			}
 		}
 	}
-	for alt := range strings.SplitSeq(strings.ReplaceAll(p, `\|`, "|"), "|") {
-		alt = strings.TrimSpace(alt)
-		alt = strings.TrimPrefix(alt, "^")
-		alt = strings.TrimSuffix(alt, "$")
-		if !slices.Contains(names, alt) {
+	return false
+}
+
+// allQuoted says whether every | separated name in alts is a key of quoted.
+func allQuoted(alts string, quoted map[string]bool) bool {
+	for n := range strings.SplitSeq(alts, "|") {
+		if !quoted[n] {
 			return false
 		}
 	}
 	return true
 }
 
+const (
+	unreachablePrefix = "unreachable func: "
+	// fixedStringMark tags a pattern read from grep -F or fgrep, which cannot
+	// anchor with $.
+	fixedStringMark = "\x00fixed:"
+)
+
+var fixedGrepFlag = regexp.MustCompile(`(?:^|\s)(?:-[a-zA-Z]*F[a-zA-Z]*|--fixed-strings)(?:\s|$)`)
+
+// pipelineEnd returns the offset in blank where the command that starts at
+// its beginning stops feeding the pipeline: a ;, && , ||, & , a newline, or the
+// ) that closes an enclosing command substitution.
+func pipelineEnd(blank string) int {
+	depth := 0
+	for i := range len(blank) {
+		switch blank[i] {
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return i
+			}
+			depth--
+		case ';', '\n', '&':
+			return i
+		case '|':
+			if i+1 < len(blank) && blank[i+1] == '|' {
+				return i
+			}
+		}
+	}
+	return len(blank)
+}
+
 // deadcodeFilters reads the pipeline stages that follow the deadcode run in
 // the recipe text. A grep stage yields its pattern arguments; any other
 // filtering tool is returned by name. A quiet grep (-q) only tests, and is
 // not a filter.
+//
+// Only the stages the deadcode command feeds directly count: the scan stops at
+// a ;, &&, ||, &, a newline, or the ) that closes the command substitution
+// holding deadcode, so a later display pipe (echo "$out" | head) is not a
+// filter.
 func deadcodeFilters(text, blank string) (patterns, other []string) {
-	start := deadcodeRun.FindStringIndex(blank)[0]
-	for _, m := range outputFilter.FindAllStringSubmatchIndex(blank[start:], -1) {
+	covered := 0
+	for _, run := range deadcodeRun.FindAllStringIndex(blank, -1) {
+		if run[0] < covered {
+			continue
+		}
+		covered = run[0] + pipelineEnd(blank[run[0]:])
+		p, o := stageFilters(text, blank, run[0], covered)
+		patterns = append(patterns, p...)
+		other = append(other, o...)
+	}
+	return patterns, other
+}
+
+// stageFilters reads the filter stages in blank[start:stop].
+func stageFilters(text, blank string, start, stop int) (patterns, other []string) {
+	scope := blank[:stop]
+	for _, m := range outputFilter.FindAllStringSubmatchIndex(scope[start:], -1) {
 		tool := blank[start+m[2] : start+m[3]]
 		from := start + m[3]
 		end := len(blank)
@@ -333,15 +413,28 @@ func deadcodeFilters(text, blank string) (patterns, other []string) {
 		}
 		switch tool {
 		case "grep", "egrep", "fgrep":
-			if quietGrep.MatchString(blank[from:end]) {
-				continue
-			}
-			patterns = append(patterns, filterArgs(text[from:end])...)
+			patterns = append(patterns, grepPatterns(tool, text[from:end], blank[from:end])...)
 		default:
 			other = append(other, tool)
 		}
 	}
 	return patterns, other
+}
+
+// grepPatterns returns the patterns of one grep stage (seg, with its masked
+// twin): none for a quiet grep, which only tests; each tagged as fixed for
+// grep -F and fgrep.
+func grepPatterns(tool, seg, maskedSeg string) []string {
+	if quietGrep.MatchString(maskedSeg) {
+		return nil
+	}
+	args := filterArgs(seg)
+	if tool == "fgrep" || fixedGrepFlag.MatchString(maskedSeg) {
+		for i := range args {
+			args[i] = fixedStringMark + args[i]
+		}
+	}
+	return args
 }
 
 // filterArgs returns the non-flag arguments of a grep stage: quoted strings
@@ -374,7 +467,7 @@ func hasMainPackage(dir string) bool {
 		}
 		name := d.Name()
 		if d.IsDir() {
-			if path != dir && (strings.HasPrefix(name, ".") || slices.Contains(sourceSkipDirs, name)) {
+			if path != dir && skipDSLDir(path, name) {
 				return filepath.SkipDir
 			}
 			return nil

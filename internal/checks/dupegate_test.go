@@ -2,6 +2,8 @@ package checks_test
 
 import (
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -81,7 +83,7 @@ const (
 	strictDeadcode = "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x) || { echo could not run; exit 1; }; if [ -n \"$$out\" ]; then echo \"$$out\"; exit 1; fi\n"
 	testDeadcode   = "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) -test ./...) || { echo could not run; exit 1; }; if [ -n \"$$out\" ]; then echo \"$$out\"; exit 1; fi\n"
 	skipDeadcode   = "\t@go list -f '{{.Name}}' ./... | grep -qx main || { echo no main; exit 0; }; out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./...) || exit 1; if [ -n \"$$out\" ]; then echo \"$$out\"; exit 1; fi\n"
-	filtered       = "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v -e 'hookA' -e 'hookB') || exit 1; if [ -n \"$$out\" ]; then echo \"$$out\"; exit 1; fi\n"
+	filtered       = "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v -e 'unreachable func: hookA$$' -e 'unreachable func: hookB$$') || exit 1; if [ -n \"$$out\" ]; then echo \"$$out\"; exit 1; fi\n"
 )
 
 func deadcodeRepo(t *testing.T, recipe string, withMain bool) string {
@@ -156,7 +158,7 @@ func TestDeadcodeFilter(t *testing.T) {
 	}{
 		"filter, no exception":     {values.Values{}, []string{"has no deadcode-filter exception"}},
 		"filter, exact allow list": {allow("hookA", "hookB"), nil},
-		"allow misses a pattern":   {allow("hookA"), []string{`"hookB" is not just names`}},
+		"allow misses a pattern":   {allow("hookA"), []string{`hookB`}},
 		"allow lists a stale name": {allow("hookA", "hookB", "hookC"), []string{`allows "hookC"`}},
 		"filter with other tool":   {values.Values{}, nil},
 	}
@@ -226,27 +228,86 @@ func TestValues_AllowOnlyOnFilterRule(t *testing.T) {
 
 func TestDeadcodeFilter_AlternationCannotHideAnUnlistedFunction(t *testing.T) {
 	t.Parallel()
-	for _, pat := range []string{`'hookA\|realDead'`, `-E 'hookA|.*'`, `-E 'hookA.*'`,
-		`-E 'hookA|^'`, `-E 'hookA|'`, `'hookA\|$'`, `-E '|hookA'`, `-E 'hookA||hookA'`} {
+	const u = "unreachable func: "
+	for _, pat := range []string{`'` + u + `hookA$$\|realDead'`, `-E '` + u + `hookA$$|.*'`, `-E '` + u + `hookA.*'`,
+		`-E '` + u + `hookA$$|^'`, `-E '` + u + `hookA$$|'`, `'` + u + `hookA$$\|$$'`, `-E '|` + u + `hookA$$'`, `-E '` + u + `hookA$$||` + u + `hookA$$'`,
+		`'hookA'`, `'` + u + `hookA'`, `-F '` + u + `hookA'`, `-F 'hookA'`, `-E '` + u + `(hookA|hookX)$$'`} {
 		recipe := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v " + pat + ") || exit 1; test -z \"$$out\"\n"
 		got := checks.CheckDeadcodeGate(deadcodeRepo(t, recipe, true), allow("hookA"))
 		if len(got) != 1 || got[0].Rule != checks.RuleDeadcodeFilter || !strings.Contains(got[0].Msg, "not just names") {
 			t.Errorf("pattern %s: want one deadcode-filter finding, got %v", pat, got)
 		}
 	}
-	sub := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v 'hookA') || exit 1; test -z \"$$out\"\n"
+	sub := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v '" + u + "hookA$$') || exit 1; test -z \"$$out\"\n"
 	if got := checks.CheckDeadcodeGate(deadcodeRepo(t, sub, true), allow("hook")); len(got) != 1 || !strings.Contains(got[0].Msg, "not just names") {
 		t.Errorf("allowed hook must not accept pattern hookA, got %v", got)
 	}
-	ok := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v -E 'hookA|hookB') || exit 1; test -z \"$$out\"\n"
-	if got := checks.CheckDeadcodeGate(deadcodeRepo(t, ok, true), allow("hookA", "hookB")); len(got) != 0 {
-		t.Errorf("names joined by | must pass, got %v", got)
+	for _, tc := range []struct {
+		pat   string
+		allow []string
+	}{
+		{`'` + u + `hookA$$'`, []string{"hookA"}},
+		{`-E '` + u + `hookA$$|` + u + `hookB$$'`, []string{"hookA", "hookB"}},
+		{`'` + u + `hookA$$\|` + u + `hookB$$'`, []string{"hookA", "hookB"}},
+		{`-E '` + u + `(hookA|hookB)$$'`, []string{"hookA", "hookB"}},
+		{`'` + u + `\(hookA\|hookB\)$$'`, []string{"hookA", "hookB"}},
+		{`'` + u + `T\.Close$$'`, []string{"T.Close"}},
+	} {
+		ok := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v " + tc.pat + ") || exit 1; test -z \"$$out\"\n"
+		if got := checks.CheckDeadcodeGate(deadcodeRepo(t, ok, true), allow(tc.allow...)); len(got) != 0 {
+			t.Errorf("pattern %s must pass, got %v", tc.pat, got)
+		}
+	}
+	bad := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v '" + u + "T.Close$$') || exit 1; test -z \"$$out\"\n"
+	if got := checks.CheckDeadcodeGate(deadcodeRepo(t, bad, true), allow("T.Close")); len(got) == 0 || !strings.Contains(got[0].Msg, "not just names") {
+		t.Errorf("an unescaped . must fail, got %v", got)
+	}
+}
+
+func TestDeadcodeFilter_DisplayPipeAfterTheGateIsNotAFilter(t *testing.T) {
+	t.Parallel()
+	const run = "go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x"
+	pass := "\t@out=$$(" + run + ") || exit 1; if [ -n \"$$out\" ]; then echo \"$$out\" | head -50; exit 1; fi\n"
+	if got := checks.CheckDeadcodeGate(deadcodeRepo(t, pass, true), values.Values{}); len(got) != 0 {
+		t.Errorf("a display pipe after the gate must not be a finding, got %v", got)
+	}
+	fail := "\t@out=$$(" + run + " | grep -v x) || exit 1; if [ -n \"$$out\" ]; then echo \"$$out\" | head -50; exit 1; fi\n"
+	got := checks.CheckDeadcodeGate(deadcodeRepo(t, fail, true), values.Values{})
+	if len(got) != 1 || got[0].Rule != checks.RuleDeadcodeFilter {
+		t.Errorf("a filter inside the substitution must still fail, got %v", got)
+	}
+}
+
+func TestDeadcodeGate_MainOutsideTheModuleTreeDoesNotCount(t *testing.T) {
+	t.Parallel()
+	const mainSrc = "package main\n\nfunc main() {}\n"
+	for name, files := range map[string]map[string]string{
+		"underscore dir":   {"_examples/main.go": mainSrc},
+		"nested module":    {"examples/go.mod": "module example.com/ex\n\ngo 1.26\n", "examples/main.go": mainSrc},
+		"hidden directory": {".tools/main.go": mainSrc},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := deadcodeRepo(t, testDeadcode, false)
+			for rel, content := range files {
+				full := filepath.Join(dir, rel)
+				if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := checks.CheckDeadcodeGate(dir, values.Values{}); len(got) != 0 {
+				t.Errorf("a library with -test must pass, got %v", got)
+			}
+		})
 	}
 }
 
 func TestDeadcodeGate_ApostropheInAComment(t *testing.T) {
 	t.Parallel()
-	recipe := "\t# it's deadcode below\n\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) -test ./... | grep -v 'x') || exit 1\n"
+	recipe := "\t# it's deadcode below\n\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) -test ./... | grep -v 'unreachable func: x$$') || exit 1\n"
 	// An unpaired quote in one command must not pair with the next: no panic, and the filter is read.
 	got := checks.CheckDeadcodeGate(deadcodeRepo(t, recipe, false), allow("x"))
 	if len(got) != 0 {
