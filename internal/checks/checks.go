@@ -61,6 +61,7 @@ const (
 	RuleCIDocsSkip      = "ci-docs-skip"         // a detect job lets a docs-only PR skip make check, context kept
 	RuleGateSkip        = "gate-skip"            // a check or audit step exits 0 when its tool is missing
 	RuleToolPin         = "tool-pin"             // a gate tool runs on PATH, at @latest, or at an unset version
+	RuleFuzzCoverage    = "fuzz-coverage"        // a Fuzz function the fuzz target does not run
 	RuleHookExitDiscard = "hook-exit-discard"    // a hook swallows a tool's exit status with nothing that surfaces the failure
 )
 
@@ -84,6 +85,7 @@ func Run(dir string) []Finding {
 
 	findings = append(findings, checkMakefile(dir, vals.Profile)...)
 	findings = append(findings, checkGateSteps(dir)...)
+	findings = append(findings, checkFuzzCoverage(dir)...)
 	findings = append(findings, checkLintFloor(dir)...)
 	findings = append(findings, checkLintPack(dir)...)
 	findings = append(findings, checkLintPin(dir)...)
