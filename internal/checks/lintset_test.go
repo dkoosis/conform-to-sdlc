@@ -140,6 +140,30 @@ func TestLintSet(t *testing.T) {
 			want:    []string{"excluded on every file by linters.exclusions: asciicheck"},
 		},
 		{
+			name:    "linter excluded by a catch-all text",
+			golangc: withExclusionRule(t, "      - linters:\n          - gosec\n        text: '.*'\n"),
+			want:    []string{"excluded on every file by linters.exclusions: gosec"},
+		},
+		{
+			name:    "linter excluded by a catch-all source",
+			golangc: withExclusionRule(t, "      - linters:\n          - gosec\n        source: '^'\n"),
+			want:    []string{"excluded on every file by linters.exclusions: gosec"},
+		},
+		{
+			name:    "linter excluded except on a path no file has",
+			golangc: withExclusionRule(t, "      - linters:\n          - gosec\n        path-except: '^nothing$'\n"),
+			want:    []string{"excluded on every file by linters.exclusions: gosec"},
+		},
+		{
+			name:    "paths-except that spares no file",
+			golangc: strings.Replace(checks.CanonicalGolangci, "    generated: lax\n    presets:", "    generated: lax\n    paths-except:\n      - '^nothing$'\n    presets:", 1),
+			want:    []string{"excluded on every file by linters.exclusions: asciicheck"},
+		},
+		{
+			name:    "path-except that spares real files passes",
+			golangc: withExclusionRule(t, "      - linters:\n          - gosec\n        path-except: '^internal/'\n"),
+		},
+		{
 			name:    "exclusion scoped by text passes",
 			golangc: withExclusionRule(t, "      - linters:\n          - wrapcheck\n        text: 'sig: func os\\.'\n"),
 		},

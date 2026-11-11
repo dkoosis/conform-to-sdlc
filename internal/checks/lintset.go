@@ -59,8 +59,9 @@ type lintSetConfig struct {
 			} `yaml:"forbidigo"`
 		} `yaml:"settings"`
 		Exclusions struct {
-			Paths []string        `yaml:"paths"`
-			Rules []exclusionRule `yaml:"rules"`
+			Paths       []string        `yaml:"paths"`
+			PathsExcept []string        `yaml:"paths-except"`
+			Rules       []exclusionRule `yaml:"rules"`
 		} `yaml:"exclusions"`
 	} `yaml:"linters"`
 }
@@ -81,15 +82,36 @@ var everyFile = []string{"main.go", "cmd/tool/main.go", "internal/pkg/file.go", 
 // matchesEveryFile reports whether pattern, a golangci path regexp, matches
 // every one of everyFile. An empty pattern matches every file.
 func matchesEveryFile(pattern string) bool {
+	return matchesAll(pattern, everyFile)
+}
+
+// matchesAnyFile reports whether pattern matches at least one of everyFile.
+func matchesAnyFile(pattern string) bool {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return true // golangci-lint itself rejects the config
+	}
+	return slices.ContainsFunc(everyFile, re.MatchString)
+}
+
+// anyText stands for the messages and source lines a linter reports: a text
+// or source pattern that matches all of them, the empty one included,
+// matches every issue.
+var anyText = []string{"", "x", "error returned from external package is unwrapped", "\treturn err"}
+
+// matchesAll reports whether pattern matches every sample. An empty pattern
+// matches everything; one that does not compile matches nothing, since
+// golangci-lint rejects the config.
+func matchesAll(pattern string, samples []string) bool {
 	if pattern == "" {
 		return true
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return false // golangci-lint itself rejects the config
+		return false
 	}
-	for _, f := range everyFile {
-		if !re.MatchString(f) {
+	for _, s := range samples {
+		if !re.MatchString(s) {
 			return false
 		}
 	}
@@ -97,20 +119,26 @@ func matchesEveryFile(pattern string) bool {
 }
 
 // excludedEverywhere is the set of linters an exclusion switches off on
-// every file while linters.enable still lists them: a rule that names the
-// linter with no text, source or path-except and a path matching every file,
-// or an exclusions.paths entry matching every file, which silences them all.
+// every file while linters.enable still lists them. That is a rule naming
+// the linter whose path, text and source match everything and whose
+// path-except spares no file; an exclusions.paths entry matching every file;
+// or exclusions.paths-except entries that spare no file. The last two
+// silence every linter.
 func (c lintSetConfig) excludedEverywhere(all []string) map[string]bool {
+	ex := c.Linters.Exclusions
 	off := map[string]bool{}
-	for _, p := range c.Linters.Exclusions.Paths {
-		if matchesEveryFile(p) {
-			for _, l := range all {
-				off[l] = true
-			}
+	everything := slices.ContainsFunc(ex.Paths, matchesEveryFile) ||
+		(len(ex.PathsExcept) > 0 && !slices.ContainsFunc(ex.PathsExcept, matchesAnyFile))
+	if everything {
+		for _, l := range all {
+			off[l] = true
 		}
 	}
-	for _, r := range c.Linters.Exclusions.Rules {
-		if r.Text != "" || r.Source != "" || r.PathExcept != "" || !matchesEveryFile(r.Path) {
+	for _, r := range ex.Rules {
+		if !matchesEveryFile(r.Path) || !matchesAll(r.Text, anyText) || !matchesAll(r.Source, anyText) {
+			continue
+		}
+		if r.PathExcept != "" && matchesAnyFile(r.PathExcept) {
 			continue
 		}
 		for _, l := range r.Linters {
