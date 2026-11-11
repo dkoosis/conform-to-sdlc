@@ -124,10 +124,8 @@ func loadValues(dir string) (values.Values, []Finding) {
 	path := filepath.Join(dir, ValuesFile)
 	v, err := values.Load(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		for _, old := range LegacyValuesFiles {
-			if legacy, lerr := values.Load(filepath.Join(dir, old)); lerr == nil {
-				return *legacy, nil
-			}
+		if legacy, ok := loadLegacyValues(dir); ok {
+			return legacy, nil
 		}
 	}
 	if err != nil {
@@ -147,6 +145,16 @@ func loadValues(dir string) (values.Values, []Finding) {
 		}}
 	}
 	return *v, nil
+}
+
+// loadLegacyValues returns the first readable old-name values file.
+func loadLegacyValues(dir string) (values.Values, bool) {
+	for _, old := range LegacyValuesFiles {
+		if legacy, err := values.Load(filepath.Join(dir, old)); err == nil && legacy != nil {
+			return *legacy, true
+		}
+	}
+	return values.Values{}, false
 }
 
 // applyExceptions drops findings whose rule id the repo has excepted with a
