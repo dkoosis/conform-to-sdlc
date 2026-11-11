@@ -102,8 +102,13 @@ func TestToolPin_Passes(t *testing.T) {
 	t.Parallel()
 	mk := withRecipe("nilcheck", "\tgo run go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VER) -include-pkgs=x ./...\n")
 	mk = strings.Replace(mk, "\ndupe: ## Duplication\n", "\ndupe: ## Duplication\n\tnpx --yes jscpd@$(JSCPD_VER) .\n", 1)
-	if got := gateFindings(t, mk, projectConfPins); len(got) != 0 {
+	if got := gateFindings(t, "-include .sandbox/project.conf\n"+mk, projectConfPins); len(got) != 0 {
 		t.Errorf("pinned forms produced %v", got)
+	}
+	// Sourcing project.conf inside the recipe also makes the key visible.
+	src := withRecipe("dupe", "\t. ./.sandbox/project.conf && npx --yes jscpd@$$JSCPD_VER .\n")
+	if got := gateFindings(t, src, projectConfPins); len(got) != 0 {
+		t.Errorf("recipe-sourced version produced %v", got)
 	}
 	// A version set in the Makefile itself, and a literal version, pass.
 	mk = "GOVULNCHECK_VER := v1.9.0\n" + withRecipe("vuln", "\tgo run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VER) ./...\n\tgo run golang.org/x/tools/cmd/deadcode@v0.52.0 ./...\n")
@@ -137,5 +142,16 @@ func TestToolPin_FlagValueAndHash(t *testing.T) {
 	mk := withRecipe("vuln", "\tgolangci-lint run --enable staticcheck ./...\n\tgo run go.uber.org/nilaway/cmd/nilaway@acb8859b9031 ./...\n")
 	if got := gateFindings(t, mk, ""); len(got) != 0 {
 		t.Errorf("flag value and commit-hash pin produced %v", got)
+	}
+}
+
+// A version only project.conf sets, with a Makefile that never reads it, is
+// empty at make time: npx jscpd@ then runs at whatever version is current.
+func TestToolPin_VersionMakeCannotSee(t *testing.T) {
+	t.Parallel()
+	mk := withRecipe("dupe", "\tnpx --yes jscpd@$(JSCPD_VER) .\n")
+	got := gateFindings(t, mk, projectConfPins)
+	if len(got) != 1 || got[0].Rule != checks.RuleToolPin || !strings.Contains(got[0].Msg, "make sees it empty") {
+		t.Fatalf("want one tool-pin about the empty version, got %v", got)
 	}
 }

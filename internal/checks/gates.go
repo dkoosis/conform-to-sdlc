@@ -149,6 +149,26 @@ func addIncludedVars(dir, text string, vars map[string]makeVar) {
 	}
 }
 
+// readsProjectConf says whether a non-comment Makefile line includes or
+// sources project.conf. Make sees a key set only there as empty otherwise.
+func readsProjectConf(makefile string) bool {
+	for l := range strings.SplitSeq(makefile, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), "#") && strings.Contains(l, "project.conf") {
+			return true
+		}
+	}
+	return false
+}
+
+// confFor is the project.conf a command's versions may come from: the whole
+// file when the Makefile reads it, else only when the command sources it.
+func confFor(cmd recipeCmd, conf, hidden map[string]string) map[string]string {
+	if strings.Contains(cmd.text, "project.conf") {
+		return hidden
+	}
+	return conf
+}
+
 // projectConf reads KEY=VALUE pairs from .sandbox/project.conf.
 func projectConf(dir string) map[string]string {
 	conf := map[string]string{}
@@ -180,7 +200,11 @@ func checkGateSteps(dir string) []Finding {
 	}
 	recipes, vars := parseRecipes(text)
 	addIncludedVars(dir, text, vars)
-	conf := projectConf(dir)
+	hidden := projectConf(dir)
+	conf := map[string]string{}
+	if readsProjectConf(text) {
+		conf = hidden
+	}
 	reached := reachable(byName, "check", "audit")
 
 	var names []string
@@ -196,7 +220,7 @@ func checkGateSteps(dir string) []Finding {
 		var perCmd []Finding
 		for _, cmd := range recipes[name] {
 			perCmd = append(perCmd, skipFindings(name, cmd)...)
-			perCmd = append(perCmd, pinFindings(name, cmd, vars, conf)...)
+			perCmd = append(perCmd, pinFindings(name, cmd, vars, confFor(cmd, conf, hidden), hidden)...)
 		}
 		findings = append(findings, dedupe(perCmd)...)
 	}
@@ -418,7 +442,7 @@ func statements(text string) []statement {
 }
 
 // pinFindings flags a known tool that runs at no fixed version.
-func pinFindings(target string, cmd recipeCmd, vars map[string]makeVar, conf map[string]string) []Finding {
+func pinFindings(target string, cmd recipeCmd, vars map[string]makeVar, conf, hidden map[string]string) []Finding {
 	var findings []Finding
 	add := func(line int, tool, why string) {
 		findings = append(findings, Finding{
@@ -433,7 +457,7 @@ func pinFindings(target string, cmd recipeCmd, vars map[string]makeVar, conf map
 	text := blankQuotes(cmd.text)
 	for _, m := range versioned.FindAllStringSubmatchIndex(text, -1) {
 		tool, ver := text[m[2]:m[3]], text[m[4]:m[5]]
-		if why := unpinned(ver, vars, conf); why != "" {
+		if why := unpinned(ver, vars, conf, hidden); why != "" {
 			add(cmd.lineAt(m[0]), tool, why)
 		}
 	}
@@ -478,7 +502,7 @@ func verKey(tool string) string {
 }
 
 // unpinned says why a version reference is not a fixed version, or "".
-func unpinned(ver string, vars map[string]makeVar, conf map[string]string) string {
+func unpinned(ver string, vars map[string]makeVar, conf, hidden map[string]string) string {
 	if !strings.HasPrefix(ver, "$") {
 		if pinnedVer.MatchString(ver) {
 			return ""
@@ -497,6 +521,9 @@ func unpinned(ver string, vars map[string]makeVar, conf map[string]string) strin
 			return fmt.Sprintf("runs at %s, which is %q in %s, not a fixed version", key, v, pinFile)
 		}
 		return ""
+	}
+	if _, ok := hidden[key]; ok {
+		return fmt.Sprintf("runs at %s, which only %s sets and the Makefile never includes or sources, so make sees it empty and the tool runs unpinned", key, pinFile)
 	}
 	return fmt.Sprintf("runs at %s, which neither the Makefile nor %s sets; add %s=<version> to %s", key, pinFile, key, pinFile)
 }
