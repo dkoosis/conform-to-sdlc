@@ -62,6 +62,29 @@ other pins), which exits 3 on a `,omitempty` tag on a bool, where a
 `//omitemptyscalar:ignore <reason>` on the field (the reason is required; golangci-lint
 warns "unknown linters" about the older `//nolint:omitemptyscalar` and no setting
 turns the warning off, so the marker is one golangci-lint does not read).
+Two gates exit 0 in their default form, so a rule reads each recipe:
+
+- `dupe-gate`: the `dupe` target's jscpd run must fail above 3%, by
+  `--threshold N` with N at most 3 on the command, or a `"threshold"` of at most
+  3 in the `.jscpd.json` the command picks up (a `--threshold` flag wins over the
+  file; `--config` names another file). Without either, jscpd exits 0 at any
+  duplication. A repo keeps a higher number only by an exception,
+  `{"rule": "dupe-gate", "reason": "<why, and the number>"}`.
+- `deadcode-gate`: a repo with a `main` package runs the strict form (deadcode
+  from main, no `-test`, so a function only a test calls is dead). A repo with no
+  `main` (a library) runs `deadcode -test ./...`, the tests as roots, and has no
+  skip branch: with no root, plain deadcode reports nothing and exits 0. The
+  scaffold writes the `-test` form, with a test file to root it.
+- `deadcode-filter`: a deadcode target may filter deadcode's output only for
+  functions an exception names, one reason each:
+  `{"rule": "deadcode-filter", "allow": {"<function>": "<reason>"}}`. The checker
+  reads the stages after the deadcode run: only `grep -v` with the names written
+  literally in its patterns is verifiable. A filter with no exception, a pattern
+  that names no allowed function, an allowed name the target does not filter, and
+  any other filtering tool (sed, awk, ...) each fail. A plain exception cannot
+  excuse this rule. A filter in a script the target calls is not seen; the rule
+  reads the Makefile recipe, so keep the deadcode run there.
+
 repo-standard itself cannot pin its own unreleased tag, so its Makefile runs
 `go run ./cmd/omitemptyscalar ./...`; `tool-pin` accepts a local-path run only in a
 repo whose `go.mod` module line is `github.com/dkoosis/repo-standard`.
@@ -83,6 +106,16 @@ atomicfile repo is exempt: its `go.mod` declares that module path, so it is the
 implementation, and it holds the raw writes the rule flags.
 
 ## Canonical linter set
+
+`lint-pack` also fails a repo with go.mod and the pack whose go.mod does not keep
+the ruleguard dsl the pack imports (`tool github.com/quasilyte/go-ruleguard/dsl`
+plus its require, or a require plus a `tools.go`-style import). The pack sits in a
+dot-directory no build reaches, so a bare require is dropped by `go mod tidy` and
+gocritic's ruleguard fails to load ("could not import"). The repair is
+`go get -tool github.com/quasilyte/go-ruleguard/dsl@v0.3.23`; `--fix` names it
+beside the pack it writes, and `init` writes the tool line and its go.sum.
+`init` also scaffolds the `standard` target as
+`go run github.com/dkoosis/repo-standard/cmd/repo-standard@$(REPO_STANDARD_VER)`.
 
 `lint-set` fails a repo whose `.golangci.yml` does not enable each linter below,
 or weakens one of these settings: errcheck's `check-blank: true` (a blank-discarded
