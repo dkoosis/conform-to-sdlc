@@ -47,6 +47,7 @@ const (
 	RuleMakefileDocs    = "makefile-docs"        // every target carries a ## doc comment
 	RuleLintFloor       = "lint-floor"           // .golangci.yml carries the 6-linter baseline floor
 	RuleLintContext     = "lint-contextcheck"    // contextcheck must stay demoted
+	RuleLintSet         = values.DropRule        // .golangci.yml enables the canonical linter set at its strict settings
 	RuleLintPack        = "lint-pack"            // .golangci-rules/ is byte-equal to the lintbrush pack conform-to-sdlc embeds
 	RuleLintPin         = "lint-pin"             // exactly one golangci-lint pin location
 	RuleCIGate          = "ci-gate"              // CI calls make check; no gate re-implemented in YAML
@@ -87,6 +88,7 @@ func Run(dir string) []Finding {
 	findings = append(findings, checkGateSteps(dir)...)
 	findings = append(findings, checkFuzzCoverage(dir)...)
 	findings = append(findings, checkLintFloor(dir)...)
+	findings = append(findings, checkLintSet(dir, vals)...)
 	findings = append(findings, checkLintPack(dir)...)
 	findings = append(findings, checkLintPin(dir)...)
 	findings = append(findings, checkCIGate(dir)...)
@@ -156,6 +158,9 @@ func applyExceptions(findings []Finding, vals values.Values) []Finding {
 	}
 	excepted := make(map[string]bool, len(vals.Exceptions))
 	for _, e := range vals.Exceptions {
+		if len(e.Drop) > 0 {
+			continue // excuses only the linters it names; lint-set reads it
+		}
 		excepted[e.Rule] = true
 		if e.Rule == RuleNoGitOps {
 			// One word excepts the whole git-hook family (loto: a repo that

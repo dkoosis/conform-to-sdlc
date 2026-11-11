@@ -1,0 +1,6 @@
+{
+  "profile": "tool",
+  "exceptions": [
+    {"rule": "lint-set", "drop": {"dupl": "generated tables repeat by design"}}
+  ]
+}

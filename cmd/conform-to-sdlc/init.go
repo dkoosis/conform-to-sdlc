@@ -130,7 +130,7 @@ func writeSkeleton(opts initFlags) error {
 	// The target is the operator's own CLI argument: init creates a directory
 	// they named, and writes only the skeleton inside it.
 	if err := os.MkdirAll(opts.target, 0o755); err != nil {
-		return err
+		return fmt.Errorf("create %s: %w", opts.target, err)
 	}
 	if err := checks.Scaffold(opts.target, opts.spec); err != nil {
 		if errors.Is(err, checks.ErrScaffoldExists) {

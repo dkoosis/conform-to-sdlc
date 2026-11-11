@@ -26,10 +26,19 @@ const (
 
 // Exception is one declared, reasoned departure from the fleet contract.
 // Every exception carries a reason; there is no bare "off" switch.
+//
+// A lint-set exception may instead name the linters it drops, each with its
+// own reason: {"rule": "lint-set", "drop": {"dupl": "<reason>"}}. It then
+// excuses only those linters, not the whole rule, and needs no top-level
+// reason. The checks package reports a drop whose reason is empty.
 type Exception struct {
-	Rule   string `json:"rule"`
-	Reason string `json:"reason"`
+	Rule   string            `json:"rule"`
+	Reason string            `json:"reason,omitempty"`
+	Drop   map[string]string `json:"drop,omitempty"`
 }
+
+// DropRule is the one rule id an exception may carry a drop for.
+const DropRule = "lint-set"
 
 // Values is one repo's conform.json: its profile plus its declared
 // exceptions.
@@ -46,6 +55,8 @@ var (
 	ErrEmptyRule = errors.New("exception rule must not be empty")
 	// ErrEmptyReason marks an exception with an empty reason.
 	ErrEmptyReason = errors.New("exception reason must not be empty")
+	// ErrDropRule marks a drop on a rule other than DropRule.
+	ErrDropRule = errors.New(`only a "lint-set" exception may carry a drop`)
 	// ErrDuplicateRule marks two exceptions in the same file declaring the
 	// same rule id.
 	ErrDuplicateRule = errors.New("duplicate exception rule")
@@ -62,7 +73,7 @@ func strictDecode(r io.Reader, v any) error {
 	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(v); err != nil {
-		return err
+		return fmt.Errorf("decode: %w", err)
 	}
 
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
@@ -120,7 +131,11 @@ func (v *Values) validate() error {
 			return fmt.Errorf("exception %d: %w", i, ErrEmptyRule)
 		}
 
-		if exc.Reason == "" {
+		if len(exc.Drop) > 0 && exc.Rule != DropRule {
+			return fmt.Errorf("exception %d (rule %q): %w", i, exc.Rule, ErrDropRule)
+		}
+
+		if exc.Reason == "" && len(exc.Drop) == 0 {
 			return fmt.Errorf("exception %d (rule %q): %w", i, exc.Rule, ErrEmptyReason)
 		}
 

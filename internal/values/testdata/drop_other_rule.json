@@ -1,0 +1,6 @@
+{
+  "profile": "tool",
+  "exceptions": [
+    {"rule": "no-git-ops", "drop": {"dupl": "not a lint rule"}}
+  ]
+}

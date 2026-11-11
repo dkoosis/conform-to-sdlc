@@ -56,7 +56,11 @@ var Members = []File{
 // Bytes returns the embedded content of the pack file named source, as named
 // in lintbrush gorules/.
 func Bytes(source string) ([]byte, error) {
-	return assets.ReadFile(path.Join(assetDir, source))
+	b, err := assets.ReadFile(path.Join(assetDir, source))
+	if err != nil {
+		return nil, fmt.Errorf("read embedded pack file %s: %w", source, err)
+	}
+	return b, nil
 }
 
 // Source is the provenance _gorules/SOURCE records: the lintbrush commit the
@@ -73,7 +77,7 @@ var ErrSource = errors.New("lintpack: bad _gorules/SOURCE")
 func ReadSource() (Source, error) {
 	data, err := assets.ReadFile(path.Join(assetDir, "SOURCE"))
 	if err != nil {
-		return Source{}, err
+		return Source{}, fmt.Errorf("read embedded SOURCE: %w", err)
 	}
 	src := Source{Blobs: map[string]string{}}
 	for line := range strings.SplitSeq(string(data), "\n") {
@@ -140,11 +144,11 @@ func Create(dir string) (bool, error) {
 	if _, err := os.Lstat(target); err == nil {
 		return false, nil
 	} else if !os.IsNotExist(err) {
-		return false, err
+		return false, fmt.Errorf("stat %s: %w", Dir, err)
 	}
 	tmp, err := os.MkdirTemp(dir, Dir+".tmp-")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("create a staging directory for %s: %w", Dir, err)
 	}
 	for _, m := range Members {
 		if !m.Required {
@@ -152,7 +156,9 @@ func Create(dir string) (bool, error) {
 		}
 		body, err := Bytes(m.Source)
 		if err == nil {
-			err = os.WriteFile(filepath.Join(tmp, m.Repo), body, 0o600)
+			if err = os.WriteFile(filepath.Join(tmp, m.Repo), body, 0o600); err != nil {
+				err = fmt.Errorf("write %s/%s: %w", Dir, m.Repo, err)
+			}
 		}
 		if err != nil {
 			_ = os.RemoveAll(tmp) // best-effort cleanup; the write error is the one returned
@@ -161,7 +167,7 @@ func Create(dir string) (bool, error) {
 	}
 	if err := os.Rename(tmp, target); err != nil {
 		_ = os.RemoveAll(tmp) // best-effort cleanup; the rename error is the one returned
-		return false, err
+		return false, fmt.Errorf("move the staged pack into %s: %w", Dir, err)
 	}
 	return true, nil
 }
