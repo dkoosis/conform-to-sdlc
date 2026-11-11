@@ -59,6 +59,8 @@ const (
 	RuleSandboxLib      = "sandbox-lib"          // .sandbox/lib matches the canonical copy conform-to-sdlc ships
 	RuleAgentsBlock     = "agents-managed-block" // root AGENTS.md carries no block a tool wrote
 	RuleCIDocsSkip      = "ci-docs-skip"         // a detect job lets a docs-only PR skip make check, context kept
+	RuleGateSkip        = "gate-skip"            // a check or audit step exits 0 when its tool is missing
+	RuleToolPin         = "tool-pin"             // a gate tool runs on PATH, at @latest, or at an unset version
 	RuleHookExitDiscard = "hook-exit-discard"    // a hook swallows a tool's exit status with nothing that surfaces the failure
 )
 
@@ -81,6 +83,7 @@ func Run(dir string) []Finding {
 	vals, findings := loadValues(dir)
 
 	findings = append(findings, checkMakefile(dir, vals.Profile)...)
+	findings = append(findings, checkGateSteps(dir)...)
 	findings = append(findings, checkLintFloor(dir)...)
 	findings = append(findings, checkLintPack(dir)...)
 	findings = append(findings, checkLintPin(dir)...)

@@ -69,20 +69,17 @@ doctor: selfcheck-local ## Machine doctor (sandbox lib) + conform-to-sdlc --loca
 selfcheck-local: ## Run conform-to-sdlc --local (machine wiring: hooksPath, bd hooks, live bd config)
 	go run ./cmd/conform-to-sdlc --local
 
-vuln: ## Scan for known vulnerabilities
-	govulncheck ./...
+vuln: ## Scan for known vulnerabilities (govulncheck, pinned)
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VER) ./...
 
 # jscpd's --gitignore flag no longer exists (silent no-op in older Makefiles);
 # --ignore with explicit globs is the working form.
-dupe: ## Check for code duplication (jscpd)
-	TMP_JSCPD=$$(mktemp -d); jscpd . --ignore "**/.git/**,**/.sandbox/**,**/.beads/**" --output $$TMP_JSCPD; rm -rf $$TMP_JSCPD
+JSCPD_VER ?= 5.1.2
+dupe: ## Check for code duplication (jscpd, pinned)
+	TMP_JSCPD=$$(mktemp -d); npx --yes jscpd@$(JSCPD_VER) . --ignore "**/.git/**,**/.sandbox/**,**/.beads/**" --output $$TMP_JSCPD; rm -rf $$TMP_JSCPD
 
-nilcheck: ## Run nilaway (skips if not installed)
-	@if ! command -v nilaway >/dev/null 2>&1; then \
-		echo "nilcheck: nilaway not installed — skipping (install: go install go.uber.org/nilaway/cmd/nilaway@latest)"; \
-		exit 0; \
-	fi
-	nilaway -include-pkgs=github.com/dkoosis/conform-to-sdlc ./...
+nilcheck: ## Run nilaway (pinned)
+	go run go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VER) -include-pkgs=github.com/dkoosis/conform-to-sdlc ./...
 
 # Runs each Fuzz function it finds, FUZZTIME apiece.
 FUZZTIME ?= 10s
