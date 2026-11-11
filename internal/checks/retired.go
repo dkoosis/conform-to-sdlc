@@ -27,23 +27,27 @@ var retiredFiles = []string{
 // renamedFiles are files this tool read under its old name, conform-to-sdlc.
 // A repo that still has the old file would otherwise lose its exceptions
 // without a word; presence is a finding that names the rename.
-var renamedFiles = map[string]string{
-	"docs/conform.json": ValuesFile,
-	"conform.json":      ValuesFile,
-}
+var renamedFiles = []string{"docs/conform.json", "conform.json"}
 
 // checkRetiredFiles reports any retired or renamed file still present.
 func checkRetiredFiles(dir string) []Finding {
 	var findings []Finding
-	for old, now := range renamedFiles {
-		if _, err := os.Stat(filepath.Join(dir, old)); err == nil {
-			findings = append(findings, Finding{
-				File:   old,
-				Rule:   RuleRetiredFiles,
-				Msg:    "renamed — the tool is now repo-standard and reads " + now + "; the old file is honored only until it moves",
-				Repair: fmt.Sprintf("git mv %s %s", old, now),
-			})
+	moved := fileExists(filepath.Join(dir, ValuesFile)) // new file exists: the old one is dead weight
+	for _, old := range renamedFiles {
+		if !fileExists(filepath.Join(dir, old)) {
+			continue
 		}
+		f := Finding{
+			File: old,
+			Rule: RuleRetiredFiles,
+			Msg:  "renamed — the tool is now repo-standard and reads " + ValuesFile + "; with no such file it falls back to the first old-name file only until that moves",
+		}
+		if moved || old != renamedFiles[0] && fileExists(filepath.Join(dir, renamedFiles[0])) {
+			f.Repair = fmt.Sprintf("fold any exceptions you still need into %s, then git rm %s", ValuesFile, old)
+		} else {
+			f.Repair = fmt.Sprintf("git mv %s %s", old, ValuesFile)
+		}
+		findings = append(findings, f)
 	}
 	for _, rel := range retiredFiles {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err == nil {
@@ -56,4 +60,9 @@ func checkRetiredFiles(dir string) []Finding {
 		}
 	}
 	return findings
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

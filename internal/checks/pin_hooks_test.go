@@ -73,6 +73,16 @@ func TestRetiredFiles_RenamedExceptionsFile(t *testing.T) {
 	}
 }
 
+func TestRetiredFiles_RenamedFileRepairWhenTargetExists(t *testing.T) {
+	t.Parallel()
+
+	dir := writeRepo(t, map[string]string{"docs/conform.json": "{}\n", "docs/repo-standard.json": "{}\n"})
+	got := checks.CheckRetiredFiles(dir)
+	if len(got) != 1 || !strings.Contains(got[0].Repair, "git rm docs/conform.json") || strings.Contains(got[0].Repair, "git mv") {
+		t.Errorf("want a git rm repair when the target exists, got %v", got)
+	}
+}
+
 func TestHooksShape(t *testing.T) {
 	t.Parallel()
 
