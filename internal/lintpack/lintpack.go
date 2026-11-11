@@ -181,7 +181,8 @@ func Sync(dir string) ([]string, error) {
 	return changed, nil
 }
 
-// Create writes the required pack files into dir/.golangci-rules only when
+// Create writes the required pack files (and rule 2's file for a repo that
+// requires atomicfile) into dir/.golangci-rules only when
 // that path does not exist at all. It builds the directory beside the target
 // and renames it into place, so a failed write leaves nothing behind. It
 // reports whether it wrote.
@@ -196,8 +197,9 @@ func Create(dir string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("create a staging directory for %s: %w", Dir, err)
 	}
+	needsOptIn := UsesAtomicfile(dir)
 	for _, m := range Members {
-		if !m.Required {
+		if !m.Wanted(needsOptIn) {
 			continue
 		}
 		body, err := Bytes(m.Source)

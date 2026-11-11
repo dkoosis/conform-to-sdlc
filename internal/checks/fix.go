@@ -64,7 +64,7 @@ func fixGolangci(dir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("write %s: %w", golangciFile, err)
 	}
-	if _, err := f.WriteString(CanonicalGolangci); err != nil {
+	if _, err := f.WriteString(canonicalGolangciFor(dir)); err != nil {
 		_ = f.Close()       // the write error is the one returned
 		_ = os.Remove(path) // leave no half-written config behind
 		return "", fmt.Errorf("write %s: %w", golangciFile, err)

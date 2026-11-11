@@ -406,3 +406,23 @@ func TestSync_Atomicfile(t *testing.T) {
 		})
 	}
 }
+
+// TestFix_AtomicfileRepoPassesLintPack: --fix on a repo that requires atomicfile
+// and has no pack or config writes the raw-state-write file and a config whose
+// ruleguard rules name it, so lint-pack passes afterwards.
+func TestFix_AtomicfileRepoPassesLintPack(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/app\n\nrequire github.com/dkoosis/atomicfile v0.3.1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checks.Fix(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, lintpack.Dir, "optin_rawstatewrite.go")); err != nil {
+		t.Errorf("--fix did not write optin_rawstatewrite.go: %v", err)
+	}
+	if got := checks.CheckLintPack(dir); len(got) != 0 {
+		t.Errorf("lint-pack after --fix = %+v, want none", got)
+	}
+}

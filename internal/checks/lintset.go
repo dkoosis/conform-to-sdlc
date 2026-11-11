@@ -12,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/dkoosis/repo-standard/internal/lintpack"
 	"github.com/dkoosis/repo-standard/internal/values"
 )
 
@@ -21,6 +22,17 @@ import (
 //
 //go:embed golangci.canonical.yml
 var CanonicalGolangci string
+
+// canonicalGolangciFor is the canonical config for the repo in dir: for a repo
+// that requires dkoosis/atomicfile, its ruleguard rules also name the
+// raw-state-write file, which lint-pack requires of it.
+func canonicalGolangciFor(dir string) string {
+	if !lintpack.UsesAtomicfile(dir) {
+		return CanonicalGolangci
+	}
+	const modern = "${base-path}/" + lintpack.Dir + "/modern.go"
+	return strings.Replace(CanonicalGolangci, modern, modern+",${base-path}/"+lintpack.Dir+"/"+rawStateWriteFile, 1)
+}
 
 // golangciFile is the config every lint rule reads.
 const golangciFile = ".golangci.yml"
