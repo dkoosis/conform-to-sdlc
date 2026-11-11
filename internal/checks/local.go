@@ -113,7 +113,9 @@ func hooksPathSetting(ctx context.Context, dir string) (scope, val string, err e
 	cmd.Dir = dir
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
-	err = cmd.Run()
+	if err = cmd.Run(); err != nil {
+		err = fmt.Errorf("git config core.hooksPath: %w", err)
+	}
 	scope, val, _ = strings.Cut(strings.TrimSpace(stdout.String()), "\t")
 	return scope, val, err
 }
@@ -329,7 +331,7 @@ func bdConfigList(ctx context.Context, dir string) (map[string]string, error) {
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("bd config list: %w", err)
 	}
 
 	values := make(map[string]string)

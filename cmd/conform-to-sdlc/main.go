@@ -91,7 +91,7 @@ func run(args []string) error {
 	}
 	dir, err := os.Getwd()
 	if err != nil {
-		return err
+		return fmt.Errorf("find the working directory: %w", err)
 	}
 	// --fix repairs first, then falls through to the ordinary check, so its
 	// exit code still answers "is this repo conforming" rather than "did I
@@ -145,7 +145,7 @@ func runSandbox(args []string) error {
 	}
 	dir, err := os.Getwd()
 	if err != nil {
-		return err
+		return fmt.Errorf("find the working directory: %w", err)
 	}
 	changed, err := sandbox.Sync(dir)
 	if err != nil {
@@ -171,7 +171,7 @@ func runPack(args []string) error {
 	}
 	dir, err := os.Getwd()
 	if err != nil {
-		return err
+		return fmt.Errorf("find the working directory: %w", err)
 	}
 	changed, err := lintpack.Sync(dir)
 	if err != nil {

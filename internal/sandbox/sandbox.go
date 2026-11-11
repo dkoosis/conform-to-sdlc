@@ -37,7 +37,7 @@ const assetDir = "assets/lib"
 func Files() (map[string][]byte, error) {
 	entries, err := fs.ReadDir(assets, assetDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read embedded %s: %w", assetDir, err)
 	}
 	out := make(map[string][]byte, len(entries))
 	for _, e := range entries {
@@ -46,7 +46,7 @@ func Files() (map[string][]byte, error) {
 		}
 		b, err := assets.ReadFile(path.Join(assetDir, e.Name()))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read embedded %s: %w", e.Name(), err)
 		}
 		out[e.Name()] = b
 	}

@@ -1,6 +1,9 @@
 package checks
 
-import "context"
+import (
+	"context"
+	"slices"
+)
 
 // Test hooks: the per-area checks stay unexported in the API; tests reach
 // them directly so unit cases don't drag the whole runner (and its bd exec)
@@ -12,6 +15,7 @@ var (
 	CheckLintFloor    = checkLintFloor
 	CheckLintPin      = checkLintPin
 	CheckLintPack     = checkLintPack
+	CheckLintSet      = checkLintSet
 	CheckCIGate       = checkCIGate
 	CheckCIDocsSkip   = checkCIDocsSkip
 	CheckCodexShape   = checkCodexShape
@@ -44,6 +48,10 @@ func SetGHAPI(f func(ctx context.Context, path string) ([]byte, error)) func() {
 	ghAPI = f
 	return func() { ghAPI = old }
 }
+
+// FloorLinters is the lint-floor list, for the test that holds the canonical
+// config to it.
+func FloorLinters() []string { return slices.Concat(floorEnable, floorLinters) }
 
 // ErrNotFound lets fleet tests simulate 404s.
 var ErrNotFound = errNotFound

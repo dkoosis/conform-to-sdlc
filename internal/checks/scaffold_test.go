@@ -79,13 +79,15 @@ func TestEmitterDerivesFromCheckerVocabulary(t *testing.T) {
 		mutate   func(t *testing.T) string // returns the token the output must carry
 	}{
 		{
-			name:     "lint floor",
+			// The scaffold's .golangci.yml is the canonical config lint-set
+			// reads; the floor is inside it (TestCanonicalGolangciHoldsTheFloor).
+			name:     "lint set",
 			artifact: ".golangci.yml",
 			mutate: func(t *testing.T) string {
 				t.Helper()
-				old := floorEnable
-				t.Cleanup(func() { floorEnable = old })
-				floorEnable = slices.Concat(old, []string{"sentinellint"})
+				old := CanonicalGolangci
+				t.Cleanup(func() { CanonicalGolangci = old })
+				CanonicalGolangci = strings.Replace(old, "  enable:\n", "  enable:\n    - sentinellint\n", 1)
 				return "sentinellint"
 			},
 		},

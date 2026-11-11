@@ -32,7 +32,7 @@ func Fix(dir string) ([]string, error) {
 		errs []error
 	)
 
-	for _, fix := range []func(string) (string, error){fixReadme, fixCheckWorkflow, fixLintPack} {
+	for _, fix := range []func(string) (string, error){fixReadme, fixCheckWorkflow, fixLintPack, fixGolangci} {
 		created, err := fix(dir)
 		if err != nil {
 			errs = append(errs, err)
@@ -44,6 +44,32 @@ func Fix(dir string) ([]string, error) {
 	}
 
 	return done, errors.Join(errs...)
+}
+
+// fixGolangci writes the canonical .golangci.yml when the repo has none. A
+// present file is never touched, however far it is from the set: its extras
+// and exclusions are a person's, and lint-set names what it lacks.
+func fixGolangci(dir string) (string, error) {
+	path := filepath.Join(dir, golangciFile)
+	if _, err := os.Lstat(path); err == nil {
+		return "", nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("stat %s: %w", golangciFile, err)
+	}
+	// O_EXCL: never replace a file that appeared since the check above.
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", fmt.Errorf("write %s: %w", golangciFile, err)
+	}
+	if _, err := f.WriteString(CanonicalGolangci); err != nil {
+		_ = f.Close()       // the write error is the one returned
+		_ = os.Remove(path) // leave no half-written config behind
+		return "", fmt.Errorf("write %s: %w", golangciFile, err)
+	}
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("write %s: %w", golangciFile, err)
+	}
+	return fmt.Sprintf("created %s — the canonical linter set; tune its path exclusions to this repo's layout", golangciFile), nil
 }
 
 // fixLintPack writes the required lintbrush pack files when the repo has no
@@ -70,19 +96,19 @@ func fixLintPack(dir string) (string, error) {
 func fixReadme(dir string) (string, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("resolve %s: %w", dir, err)
 	}
 	path := filepath.Join(abs, ReadmeFile)
 	if _, err := os.Stat(path); err == nil {
 		return "", nil // present — its heading and prose are a person's business
 	} else if !os.IsNotExist(err) {
-		return "", err
+		return "", fmt.Errorf("stat %s: %w", ReadmeFile, err)
 	}
 	// 0o600: the file is world-readable the moment git tracks it, so a wider
 	// mode here buys nothing and trips gosec. #nosec is a worse answer than a
 	// mode that is simply correct.
 	if err := os.WriteFile(path, []byte(ReadmeSkeleton(repoName(abs))), 0o600); err != nil {
-		return "", err
+		return "", fmt.Errorf("write %s: %w", ReadmeFile, err)
 	}
 	return fmt.Sprintf("created %s — replace the opening comment with `# %s`, then say what the repo is", ReadmeFile, repoName(abs)), nil
 }
@@ -100,14 +126,14 @@ func fixCheckWorkflow(dir string) (string, error) {
 	if _, err := os.Stat(path); err == nil {
 		return "", nil
 	} else if !os.IsNotExist(err) {
-		return "", err
+		return "", fmt.Errorf("stat %s: %w", ciGateFile, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return "", err
+		return "", fmt.Errorf("create %s: %w", filepath.Dir(ciGateFile), err)
 	}
 	// 0o600 for the same reason fixReadme uses it.
 	if err := os.WriteFile(path, []byte(renderCheckWorkflow(ScaffoldSpec{})), 0o600); err != nil {
-		return "", err
+		return "", fmt.Errorf("write %s: %w", ciGateFile, err)
 	}
 	return fmt.Sprintf("created %s — make check behind the docs-only detect job", ciGateFile), nil
 }

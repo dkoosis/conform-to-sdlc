@@ -2,6 +2,7 @@ package values_test
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -37,6 +38,16 @@ func TestLoad_Valid(t *testing.T) {
 			},
 		},
 		{
+			name: "lint-set drop: per-linter reasons, no top-level reason",
+			file: "testdata/lint_set_drop.json",
+			want: values.Values{
+				Profile: values.ProfileTool,
+				Exceptions: []values.Exception{
+					{Rule: "lint-set", Drop: map[string]string{"dupl": "generated tables repeat by design"}},
+				},
+			},
+		},
+		{
 			name: "atomicfile: lib profile, zero exceptions",
 			file: "testdata/atomicfile.json",
 			want: values.Values{
@@ -64,7 +75,7 @@ func TestLoad_Valid(t *testing.T) {
 			}
 
 			for i, exc := range got.Exceptions {
-				if exc != tt.want.Exceptions[i] {
+				if !reflect.DeepEqual(exc, tt.want.Exceptions[i]) {
 					t.Errorf("Exceptions[%d] = %+v, want %+v", i, exc, tt.want.Exceptions[i])
 				}
 			}
@@ -96,6 +107,12 @@ func TestLoad_Invalid(t *testing.T) {
 			file:        "testdata/missing_reason.json",
 			wantErrIs:   values.ErrEmptyReason,
 			wantContain: []string{"testdata/missing_reason.json", "exception 0", "no-git-ops"},
+		},
+		{
+			name:        "drop on a rule other than lint-set",
+			file:        "testdata/drop_other_rule.json",
+			wantErrIs:   values.ErrDropRule,
+			wantContain: []string{"testdata/drop_other_rule.json", "exception 0", "no-git-ops"},
 		},
 		{
 			name:        "empty rule",

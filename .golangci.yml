@@ -21,6 +21,7 @@ linters:
     - errorlint
     - nilerr
     - nilnesserr
+    - wrapcheck
 
     # Safety
     - bodyclose
@@ -32,6 +33,7 @@ linters:
     - predeclared
     - rowserrcheck
     - sqlclosecheck
+    - unqueryvet
 
     # Complexity
     - cyclop
@@ -39,6 +41,7 @@ linters:
     - gocognit
     - gocyclo
     - nestif
+    - dupl
 
     # Enum & type safety
     - exhaustive
@@ -58,6 +61,7 @@ linters:
     - gochecknoinits
     - goconst
     - gocritic
+    - godoclint
     - grouper
     - inamedparam
     - intrange
@@ -97,6 +101,11 @@ linters:
       # handled — required for subset switches (e.g. dialogue.Move v1 handles
       # repair/accept and defaults the neutral + reserved-v2 cases).
       default-signifies-exhaustive: true
+    wrapcheck:
+      # This module's own packages already wrap with context at the boundary
+      # where the error starts; cmd/ re-wrapping them adds only noise.
+      ignore-package-globs:
+        - github.com/dkoosis/conform-to-sdlc/*
     errcheck:
       exclude-functions:
         - (io.Closer).Close
@@ -196,9 +205,12 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      # Test files: relax security, complexity, and context requirements
+      # Test files: relax security, complexity, and context requirements;
+      # wrapping is a production-code concern and table tests repeat by design.
       - linters:
           - gosec
+          - wrapcheck
+          - dupl
         path: _test\.go
       - linters:
           - cyclop

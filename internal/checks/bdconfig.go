@@ -1,7 +1,9 @@
 package checks
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +63,7 @@ var bdKeys = []bdKey{
 func checkBDConfig(dir string) []Finding {
 	doc, err := readBDConfig(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return []Finding{{
 				File:   bdConfigFile,
 				Rule:   RuleBDConfig,
@@ -95,11 +97,11 @@ func checkBDConfig(dir string) []Finding {
 func readBDConfig(dir string) (map[string]any, error) {
 	data, err := os.ReadFile(filepath.Join(dir, bdConfigFile))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", bdConfigFile, err)
 	}
 	var doc map[string]any
 	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse %s: %w", bdConfigFile, err)
 	}
 	return doc, nil
 }

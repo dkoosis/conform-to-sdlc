@@ -113,7 +113,7 @@ func goodRepo() map[string]string {
 		"docs/conform.json":                  goodValues,
 		".beads/config.yaml":                 goodBDConfig,
 		"Makefile":                           goodMakefile,
-		".golangci.yml":                      goodGolangci,
+		".golangci.yml":                      checks.CanonicalGolangci,
 		".sandbox/project.conf":              goodProjectConf,
 		".github/workflows/check.yml":        goodCheckYML,
 		".github/workflows/codex-review.yml": goodCodexYML,
