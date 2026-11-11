@@ -53,6 +53,9 @@ func SetGHAPI(f func(ctx context.Context, path string) ([]byte, error)) func() {
 // config to it.
 func FloorLinters() []string { return slices.Concat(floorEnable, floorLinters) }
 
+// SettingIDs is the set of setting keys a lint-set drop may name.
+func SettingIDs() map[string]bool { return settingIDs }
+
 // ErrNotFound lets fleet tests simulate 404s.
 var ErrNotFound = errNotFound
 

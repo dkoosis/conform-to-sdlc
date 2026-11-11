@@ -3,6 +3,7 @@ package checks_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -45,6 +46,17 @@ func withoutLinter(t *testing.T, linter string) string {
 	return strings.Replace(checks.CanonicalGolangci, line, "\n", 1)
 }
 
+// withExclusionRule returns the canonical config with rule (YAML, indented as
+// an exclusions.rules item) added first in linters.exclusions.rules.
+func withExclusionRule(t *testing.T, rule string) string {
+	t.Helper()
+	const anchor = "    rules:\n      # Tests"
+	if strings.Count(checks.CanonicalGolangci, anchor) != 1 {
+		t.Fatal("canonical config has no single exclusions.rules anchor")
+	}
+	return strings.Replace(checks.CanonicalGolangci, anchor, "    rules:\n"+rule+"      # Tests", 1)
+}
+
 func TestLintSet(t *testing.T) {
 	t.Parallel()
 
@@ -79,7 +91,7 @@ func TestLintSet(t *testing.T) {
 			name:    "drop of a linter outside the set",
 			golangc: checks.CanonicalGolangci,
 			values:  `{"profile": "tool", "exceptions": [{"rule": "lint-set", "drop": {"depguard": "not in the set"}}]}`,
-			want:    []string{"drops depguard, which is not in the canonical set"},
+			want:    []string{"drops depguard, which is neither a canonical linter"},
 		},
 		{
 			name:    "nolintlint without require-explanation",
@@ -111,6 +123,36 @@ func TestLintSet(t *testing.T) {
 			name:    "linter switched off in disable",
 			golangc: strings.Replace(checks.CanonicalGolangci, "    - godox\n", "    - godox\n    - wrapcheck\n", 1),
 			want:    []string{"canonical linters not enabled: wrapcheck"},
+		},
+		{
+			name:    "linter excluded on every path",
+			golangc: withExclusionRule(t, "      - linters:\n          - wrapcheck\n          - gosec\n        path: '.*'\n"),
+			want:    []string{"excluded on every file by linters.exclusions: gosec, wrapcheck"},
+		},
+		{
+			name:    "linter excluded with no path",
+			golangc: withExclusionRule(t, "      - linters:\n          - dupl\n"),
+			want:    []string{"excluded on every file by linters.exclusions: dupl"},
+		},
+		{
+			name:    "every path excluded",
+			golangc: strings.Replace(checks.CanonicalGolangci, "    generated: lax\n    presets:", "    generated: lax\n    paths:\n      - '.*'\n    presets:", 1),
+			want:    []string{"excluded on every file by linters.exclusions: asciicheck"},
+		},
+		{
+			name:    "exclusion scoped by text passes",
+			golangc: withExclusionRule(t, "      - linters:\n          - wrapcheck\n        text: 'sig: func os\\.'\n"),
+		},
+		{
+			name:    "allow-unused kept with its reason",
+			golangc: strings.Replace(checks.CanonicalGolangci, "require-specific: true", "require-specific: true\n      allow-unused: true", 1),
+			values:  `{"profile": "tool", "exceptions": [{"rule": "lint-set", "drop": {"nolintlint.allow-unused": "a newer linter build calls a still-needed directive dead"}}]}`,
+		},
+		{
+			name:    "a setting drop excuses only that setting",
+			golangc: strings.Replace(withoutLinter(t, "dupl"), "require-specific: true", "require-specific: true\n      allow-unused: true", 1),
+			values:  `{"profile": "tool", "exceptions": [{"rule": "lint-set", "drop": {"nolintlint.allow-unused": "a newer linter build calls a still-needed directive dead"}}]}`,
+			want:    []string{"canonical linters not enabled: dupl"},
 		},
 		{
 			name:    "two linters beyond the set",
@@ -286,5 +328,26 @@ func TestLintSet_Fast(t *testing.T) {
 	}
 	if per := time.Since(start) / 100; per > 10*time.Millisecond {
 		t.Errorf("lint-set takes %v a run, want under 10ms", per)
+	}
+}
+
+// TestLintSet_EverySettingCanBeKept: each setting lint-set reports has a key a
+// drop may name, so keeping one never takes excepting the whole rule.
+func TestLintSet_EverySettingCanBeKept(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("lintset.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := checks.SettingIDs()
+	re := regexp.MustCompile(`weak\("linters\.settings\.([^"]+)"`)
+	found := re.FindAllStringSubmatch(string(src), -1)
+	if len(found) < len(ids) {
+		t.Fatalf("found %d weak settings in lintset.go, want at least %d", len(found), len(ids))
+	}
+	for _, m := range found {
+		if !ids[m[1]] {
+			t.Errorf("setting %s is reported but a drop cannot name it", m[1])
+		}
 	}
 }

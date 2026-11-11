@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -57,7 +58,66 @@ type lintSetConfig struct {
 				Forbid       []forbidRule `yaml:"forbid"`
 			} `yaml:"forbidigo"`
 		} `yaml:"settings"`
+		Exclusions struct {
+			Paths []string        `yaml:"paths"`
+			Rules []exclusionRule `yaml:"rules"`
+		} `yaml:"exclusions"`
 	} `yaml:"linters"`
+}
+
+// exclusionRule is one linters.exclusions.rules entry.
+type exclusionRule struct {
+	Linters    []string `yaml:"linters"`
+	Path       string   `yaml:"path"`
+	PathExcept string   `yaml:"path-except"`
+	Text       string   `yaml:"text"`
+	Source     string   `yaml:"source"`
+}
+
+// everyFile stands for the files a repo lints: an exclusion whose path
+// matches all of them reaches every file.
+var everyFile = []string{"main.go", "cmd/tool/main.go", "internal/pkg/file.go", "internal/pkg/file_test.go"}
+
+// matchesEveryFile reports whether pattern, a golangci path regexp, matches
+// every one of everyFile. An empty pattern matches every file.
+func matchesEveryFile(pattern string) bool {
+	if pattern == "" {
+		return true
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return false // golangci-lint itself rejects the config
+	}
+	for _, f := range everyFile {
+		if !re.MatchString(f) {
+			return false
+		}
+	}
+	return true
+}
+
+// excludedEverywhere is the set of linters an exclusion switches off on
+// every file while linters.enable still lists them: a rule that names the
+// linter with no text, source or path-except and a path matching every file,
+// or an exclusions.paths entry matching every file, which silences them all.
+func (c lintSetConfig) excludedEverywhere(all []string) map[string]bool {
+	off := map[string]bool{}
+	for _, p := range c.Linters.Exclusions.Paths {
+		if matchesEveryFile(p) {
+			for _, l := range all {
+				off[l] = true
+			}
+		}
+	}
+	for _, r := range c.Linters.Exclusions.Rules {
+		if r.Text != "" || r.Source != "" || r.PathExcept != "" || !matchesEveryFile(r.Path) {
+			continue
+		}
+		for _, l := range r.Linters {
+			off[l] = true
+		}
+	}
+	return off
 }
 
 // forbidRule is one forbidigo pattern.
@@ -96,8 +156,9 @@ func canonicalSet() (lintSetConfig, map[string]bool, error) {
 	return c, c.enabled(nil), nil
 }
 
-// lintSetDrops collects the linters the repo drops by reason in
-// docs/conform.json, and a finding for each drop that carries no reason.
+// lintSetDrops collects the linters, and the settings by their settingIDs
+// key, that the repo drops by reason in docs/conform.json, and a finding for
+// each drop with no reason or that names nothing lint-set checks.
 func lintSetDrops(vals values.Values, canon map[string]bool) (map[string]bool, []Finding) {
 	drops := map[string]bool{}
 	var findings []Finding
@@ -114,11 +175,11 @@ func lintSetDrops(vals values.Values, canon map[string]bool) (map[string]bool, [
 					Msg:    fmt.Sprintf("drops %s with no reason — a linter leaves the set only with its why written down", l),
 					Repair: fmt.Sprintf(`write the reason: {"rule": "lint-set", "drop": {%q: "<why this repo cannot run it>"}}`, l),
 				})
-			case !canon[l]:
+			case !canon[l] && !settingIDs[l]:
 				findings = append(findings, Finding{
 					File:   ValuesFile,
 					Rule:   RuleLintSet,
-					Msg:    fmt.Sprintf("drops %s, which is not in the canonical set — the entry excuses nothing", l),
+					Msg:    fmt.Sprintf("drops %s, which is neither a canonical linter nor a setting lint-set checks — the entry excuses nothing", l),
 					Repair: fmt.Sprintf("delete %q from the lint-set drop", l),
 				})
 			default:
@@ -133,7 +194,9 @@ func lintSetDrops(vals values.Values, canon map[string]bool) (map[string]bool, [
 // in the canonical set, or that weakens a setting the set holds strict
 // (lint-set; epic cfm-pxx R2, decisions 284ca53cd396 and d7ea466a8172). A repo
 // may enable more. It leaves one out only by name and reason in
-// docs/conform.json: {"rule": "lint-set", "drop": {"<linter>": "<reason>"}}.
+// docs/conform.json: {"rule": "lint-set", "drop": {"<linter>": "<reason>"}};
+// a weak setting is kept the same way, keyed by its settingIDs entry. A
+// linter enabled but excluded on every file counts as switched off.
 //
 // lint-floor still guards the six-linter floor on its own: a repo cannot drop
 // a floor linter through lint-set.
@@ -169,10 +232,15 @@ func checkLintSet(dir string, vals values.Values) []Finding {
 	}
 
 	on := cfg.enabled(sortedKeys(canonOn))
-	var missing []string
+	off := cfg.excludedEverywhere(sortedKeys(canonOn))
+	var missing, excluded []string
 	for _, l := range sortedKeys(canonOn) {
-		if !on[l] && !drops[l] {
+		switch {
+		case drops[l]:
+		case !on[l]:
 			missing = append(missing, l)
+		case off[l]:
+			excluded = append(excluded, l)
 		}
 	}
 	if len(missing) > 0 {
@@ -184,16 +252,52 @@ func checkLintSet(dir string, vals values.Values) []Finding {
 		})
 	}
 
+	if len(excluded) > 0 {
+		findings = append(findings, Finding{
+			File:   golangciFile,
+			Rule:   RuleLintSet,
+			Msg:    "canonical linters enabled but excluded on every file by linters.exclusions: " + strings.Join(excluded, ", "),
+			Repair: "scope the exclusion with a narrower path, text or source; or drop the linter with its reason in " + ValuesFile + `: {"rule": "lint-set", "drop": {"<linter>": "<reason>"}}`,
+		})
+	}
+
 	for _, w := range weakSettings(cfg, canon, on) {
-		findings = append(findings, Finding{File: golangciFile, Rule: RuleLintSet, Msg: w.msg, Repair: w.repair})
+		if drops[w.id] {
+			continue
+		}
+		findings = append(findings, Finding{
+			File:   golangciFile,
+			Rule:   RuleLintSet,
+			Msg:    w.msg,
+			Repair: w.repair + `; or keep it with its reason in ` + ValuesFile + `: {"rule": "lint-set", "drop": {"` + w.id + `": "<reason>"}}`,
+		})
 	}
 	return findings
 }
 
-type weakSetting struct{ msg, repair string }
+// weakSetting is one setting that switches a canonical linter partly off. id
+// is the setting's path under linters.settings, the key a lint-set drop names
+// to keep it.
+type weakSetting struct{ id, msg, repair string }
+
+const settingsPrefix = "linters.settings."
 
 func weak(setting, why, repair string) weakSetting {
-	return weakSetting{msg: setting + " " + why, repair: repair}
+	return weakSetting{id: strings.TrimPrefix(setting, settingsPrefix), msg: setting + " " + why, repair: repair}
+}
+
+// settingIDs is every setting id lint-set can report: the settings a drop
+// may name besides a linter.
+var settingIDs = map[string]bool{
+	"nolintlint.require-explanation":     true,
+	"nolintlint.require-specific":        true,
+	"nolintlint.allow-unused":            true,
+	"errcheck.exclude-functions":         true,
+	"gocritic.enabled-checks":            true,
+	"gocritic.settings.ruleguard.rules":  true,
+	"gocritic.settings.ruleguard.failOn": true,
+	"forbidigo.forbid":                   true,
+	"forbidigo.analyze-types":            true,
 }
 
 // weakSettings names each setting that switches an enabled canonical linter

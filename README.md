@@ -53,9 +53,12 @@ beyond the canonical list, gocritic's ruleguard wiring of the lintbrush pack
 (`bugclasses.go` and `modern.go`, `failOn: dsl`), and forbidigo's
 `context.Background` pattern with `analyze-types`. The set and its settings are
 the embedded `internal/checks/golangci.canonical.yml`, which `--fix` writes
-into a repo that has no `.golangci.yml`. A repo may enable more. It drops a
-linter only by name and reason in `docs/conform.json`:
-`{"rule": "lint-set", "drop": {"<linter>": "<reason>"}}`.
+into a repo that has no `.golangci.yml`. A linter that is enabled but excluded
+on every file by `linters.exclusions` counts as off. A repo may enable more. It
+drops a linter only by name and reason in `docs/conform.json`:
+`{"rule": "lint-set", "drop": {"<linter>": "<reason>"}}`. It keeps a weaker
+setting the same way, keyed by the setting's path under `linters.settings`, as
+`"nolintlint.allow-unused"`; the finding names the key.
 
 The set is the union of what ferret, sdlc, loto, canapay and trixi enable
 (golangci-lint v2.14.0), 66 linters. ferret's 62 are the base; the others name
