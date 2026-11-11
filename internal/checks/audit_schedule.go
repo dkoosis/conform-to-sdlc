@@ -106,13 +106,13 @@ func fixAuditWorkflow(dir string) (string, error) {
 	if _, err := os.Stat(path); err == nil {
 		return "", nil
 	} else if !os.IsNotExist(err) {
-		return "", err
+		return "", fmt.Errorf("stat %s: %w", auditWorkflowFile, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return "", err
+		return "", fmt.Errorf("create %s: %w", filepath.Dir(auditWorkflowFile), err)
 	}
 	if err := os.WriteFile(path, []byte(renderAuditWorkflow(ScaffoldSpec{})), 0o600); err != nil {
-		return "", err
+		return "", fmt.Errorf("write %s: %w", auditWorkflowFile, err)
 	}
 	return fmt.Sprintf("created %s — make audit nightly", auditWorkflowFile), nil
 }
