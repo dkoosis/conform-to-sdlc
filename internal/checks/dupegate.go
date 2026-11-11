@@ -55,7 +55,7 @@ func gateRecipes(dir, target string) ([]recipeCmd, map[string]makeVar) {
 func checkDupeGate(dir string) []Finding {
 	cmds, vars := gateRecipes(dir, "dupe")
 	for _, cmd := range cmds {
-		run, ok := jscpdInvocation(cmd.text)
+		run, ok := jscpdInvocation(expandMakeVars(cmd.text, vars))
 		if !ok {
 			continue
 		}
@@ -180,9 +180,23 @@ func resolveMakeVars(s string, vars map[string]makeVar) string {
 	})
 }
 
+// expandMakeVars resolves $(NAME) and ${NAME} until the text stops changing
+// (a variable may hold another), so a jscpd run through a variable is seen.
+func expandMakeVars(s string, vars map[string]makeVar) string {
+	for range 5 {
+		next := resolveMakeVars(s, vars)
+		if next == s {
+			break
+		}
+		s = next
+	}
+	return s
+}
+
 var (
 	deadcodeRun    = regexp.MustCompile(`\bdeadcode\b`)
-	deadcodeTest   = regexp.MustCompile(`\s-test(?:\s|$)`)
+	deadcodeTest   = regexp.MustCompile(`\s--?test(?:=(?:true|1|t|T|TRUE|True))?(?:\s|$)`)
+	swallowTail    = regexp.MustCompile(`\|\|\s*(?:true\b|:(?:\s|;|$)|exit\s+0\b)`)
 	deadcodeSkip   = regexp.MustCompile(`\bexit\s+0\b`)
 	outputFilter   = regexp.MustCompile("(?:^|[\\s|;&(`])(grep|egrep|fgrep|rg|sed|awk|cut|head|tail|tr|comm|uniq|sort|diff)(?:\\s|$)")
 	quietGrep      = regexp.MustCompile(`^\s+-\w*q`)
@@ -208,9 +222,11 @@ func checkDeadcodeGate(dir string, vals values.Values) []Finding {
 	// Each command is masked on its own, so a quote left open in one (an
 	// apostrophe in a comment) cannot pair with a quote in the next.
 	var sb, masked strings.Builder
+	var swallowed []Finding
 	for _, c := range cmds {
 		m := maskQuotes(c.text)
 		if deadcodeRun.MatchString(m) {
+			swallowed = append(swallowed, deadcodeSwallowFindings(c.text, m)...)
 			sb.WriteString(c.text + "\n")
 			masked.WriteString(m + "\n")
 		}
@@ -219,8 +235,59 @@ func checkDeadcodeGate(dir string, vals values.Values) []Finding {
 	if text == "" {
 		return nil // no deadcode step to read; makefile-verbs owns a missing target
 	}
-	findings := deadcodeRootFindings(runs, hasMainPackage(dir))
+	findings := append(deadcodeRootFindings(runs, hasMainPackage(dir)), swallowed...)
 	return append(findings, deadcodeFilterFindings(text, runs, vals)...)
+}
+
+var (
+	deadcodeCapture = regexp.MustCompile("(\\w+)=(?:\\$\\$\\(|`)[^\n]*$")
+	negatedPipe     = regexp.MustCompile(`(?:^|[\s;(@+])!\s*go\s+run\s+\S*$`)
+	pipeToGrep      = regexp.MustCompile(`\|\s*grep\b`)
+)
+
+// deadcodeSwallowFindings says whether a deadcode recipe command can never
+// fail. deadcode exits 0 when it finds dead code, so the gate is a test of its
+// output: captured and tested non-empty (-n/-z), or piped to `! grep`. A
+// failure swallowed by `|| true`, `|| :`, `|| exit 0` or make's - prefix, or an
+// output nobody tests, passes at any dead code. text is the command, masked
+// the same with its quoted strings blanked.
+func deadcodeSwallowFindings(text, masked string) []Finding {
+	trim := strings.TrimLeft(text, " \t")
+	if strings.HasPrefix(strings.TrimLeft(trim, "@+-"), "#") {
+		return nil // a comment that mentions deadcode
+	}
+	prefix := trim[:len(trim)-len(strings.TrimLeft(trim, "@+-"))]
+	at := deadcodeRun.FindStringIndex(masked)[0]
+	var why string
+	switch {
+	case strings.Contains(prefix, "-"):
+		why = "a leading - ignores the command's exit status"
+	case swallowTail.MatchString(masked[at:]):
+		why = "`|| true`, `|| :` or `|| exit 0` swallows its failure"
+	case !deadcodeOutputTested(text, masked, at):
+		why = "its output is neither captured and tested (-n or -z) nor a negated pipeline (`! deadcode ... | grep .`); deadcode exits 0 when it finds dead code"
+	default:
+		return nil
+	}
+	return []Finding{{
+		File:   makefileFile,
+		Rule:   RuleDeadcodeGate,
+		Msg:    "the deadcode target can never fail: " + why,
+		Repair: "capture and test the output: out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./...) || { echo \"deadcode: could not run\"; exit 1; }; if [ -n \"$$out\" ]; then echo \"$$out\"; exit 1; fi",
+	}}
+}
+
+// deadcodeOutputTested says whether the command tests what deadcode prints.
+func deadcodeOutputTested(text, masked string, at int) bool {
+	if negatedPipe.MatchString(masked[:at]) && pipeToGrep.MatchString(masked[at:]) {
+		return true
+	}
+	if m := deadcodeCapture.FindStringSubmatch(masked[:at]); m != nil {
+		v := `"?\$\$\{?` + regexp.QuoteMeta(m[1]) + `\b\}?"?`
+		return regexp.MustCompile(`-[nz]\s+` + v + `|` + v + `\s*\|\s*grep\s+-\w*q`).MatchString(text[at:])
+	}
+	// -z "$$(... deadcode ...)": the substitution is the tested word.
+	return regexp.MustCompile(`-[nz]\s+"\$\$\([^"]*deadcode`).MatchString(text)
 }
 
 // deadcodeRootFindings reads runs, the recipe with its quoted strings masked.
@@ -353,6 +420,11 @@ const (
 
 var fixedGrepFlag = regexp.MustCompile(`(?:^|\s)(?:-[a-zA-Z]*F[a-zA-Z]*|--fixed-strings)(?:\s|$)`)
 
+// isRedirectAmp says whether the & at blank[i] is part of 2>&1 or &>.
+func isRedirectAmp(blank string, i int) bool {
+	return (i > 0 && blank[i-1] == '>') || (i+1 < len(blank) && blank[i+1] == '>')
+}
+
 // pipelineEnd returns the offset in blank where the command that starts at
 // its beginning stops feeding the pipeline: a ;, && , ||, & , a newline, or the
 // ) that closes an enclosing command substitution.
@@ -367,7 +439,12 @@ func pipelineEnd(blank string) int {
 				return i
 			}
 			depth--
-		case ';', '\n', '&':
+		case '&':
+			// 2>&1 and &> redirect; only & and && end the pipeline.
+			if !isRedirectAmp(blank, i) {
+				return i
+			}
+		case ';', '\n':
 			return i
 		case '|':
 			if i+1 < len(blank) && blank[i+1] == '|' {

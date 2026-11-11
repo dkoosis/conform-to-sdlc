@@ -29,6 +29,8 @@ func TestDupeGate(t *testing.T) {
 	}{
 		"no threshold, no config":                {recipe: bare, want: true, msg: "no --threshold"},
 		"config without threshold":               {recipe: bare, files: map[string]string{".jscpd.json": `{"gitignore": true}`}, want: true, msg: `sets no "threshold"`},
+		"variable form, no threshold":            {recipe: "\t$(JSCPD) .\n", files: map[string]string{"Makefile": withRecipe("dupe", "\t$(JSCPD) .\n") + "JSCPD_VER := 5.1.2\nJSCPD := npx jscpd@$(JSCPD_VER)\n"}, want: true, msg: "no --threshold"},
+		"variable form, threshold 3":             {recipe: "\t$(JSCPD) --threshold 3 .\n", files: map[string]string{"Makefile": withRecipe("dupe", "\t$(JSCPD) --threshold 3 .\n") + "JSCPD_VER := 5.1.2\nJSCPD := npx jscpd@$(JSCPD_VER)\n"}},
 		"at-sign prefix":                         {recipe: "\t@npx jscpd .\n", want: true, msg: "no --threshold"},
 		"at-sign prefix, threshold 10":           {recipe: "\t@npx jscpd --threshold 10 .\n", want: true, msg: "above 3%"},
 		"dash prefix":                            {recipe: "\t-npx jscpd .\n", want: true, msg: "no --threshold"},
@@ -307,10 +309,77 @@ func TestDeadcodeGate_MainOutsideTheModuleTreeDoesNotCount(t *testing.T) {
 
 func TestDeadcodeGate_ApostropheInAComment(t *testing.T) {
 	t.Parallel()
-	recipe := "\t# it's deadcode below\n\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) -test ./... | grep -v 'unreachable func: x$$') || exit 1\n"
+	recipe := "\t# it's deadcode below\n\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) -test ./... | grep -v 'unreachable func: x$$') || exit 1; test -z \"$$out\"\n"
 	// An unpaired quote in one command must not pair with the next: no panic, and the filter is read.
 	got := checks.CheckDeadcodeGate(deadcodeRepo(t, recipe, false), allow("x"))
 	if len(got) != 0 {
 		t.Fatalf("want none, got %v", got)
+	}
+}
+
+func TestDeadcodeFilter_RedirectionBeforeThePipe(t *testing.T) {
+	t.Parallel()
+	const run = "go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x"
+	for _, redir := range []string{"2>&1", "2>/dev/null", "2>&1 </dev/null"} {
+		recipe := "\t@out=$$(" + run + " " + redir + " | grep -v x) || exit 1; test -z \"$$out\"\n"
+		got := checks.CheckDeadcodeGate(deadcodeRepo(t, recipe, true), values.Values{})
+		if len(got) != 1 || got[0].Rule != checks.RuleDeadcodeFilter {
+			t.Errorf("%s before the filter: want one deadcode-filter finding, got %v", redir, got)
+		}
+	}
+}
+
+func TestDeadcodeGate_CannotFail(t *testing.T) {
+	t.Parallel()
+	const run = "go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x"
+	tests := map[string]struct {
+		recipe string
+		fail   bool
+	}{
+		"scaffold form":                {"\t@out=$$(" + run + ") || { echo could not run; exit 1; }; if [ -n \"$$out\" ]; then echo \"$$out\"; exit 1; fi\n", false},
+		"test -z form":                 {"\t@out=$$(" + run + ") || exit 1; test -z \"$$out\"\n", false},
+		"piped to ! grep":              {"\t@! " + run + " | grep .\n", false},
+		"|| true":                      {"\t@out=$$(" + run + ") || true; if [ -n \"$$out\" ]; then exit 1; fi\n", true},
+		"|| :":                         {"\t@out=$$(" + run + ") || :; if [ -n \"$$out\" ]; then exit 1; fi\n", true},
+		"|| exit 0":                    {"\t@out=$$(" + run + ") || exit 0; if [ -n \"$$out\" ]; then exit 1; fi\n", true},
+		"dash prefix":                  {"\t-@out=$$(" + run + "); if [ -n \"$$out\" ]; then exit 1; fi\n", true},
+		"bare run, output untested":    {"\t@" + run + "\n", true},
+		"captured, never tested":       {"\t@out=$$(" + run + ") || exit 1; echo \"$$out\"\n", true},
+		"tests another variable":       {"\t@out=$$(" + run + ") || exit 1; if [ -n \"$$other\" ]; then exit 1; fi\n", true},
+		"bare with go run in the tail": {"\t@" + run + " | head -5\n", true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var gate []checks.Finding
+			for _, f := range checks.CheckDeadcodeGate(deadcodeRepo(t, tc.recipe, true), values.Values{}) {
+				if f.Rule == checks.RuleDeadcodeGate {
+					gate = append(gate, f)
+				}
+			}
+			if tc.fail != (len(gate) == 1) || len(gate) > 1 {
+				t.Fatalf("fail=%v, got %v", tc.fail, gate)
+			}
+			if tc.fail && !strings.Contains(gate[0].Msg, "can never fail") {
+				t.Errorf("msg = %q", gate[0].Msg)
+			}
+		})
+	}
+}
+
+func TestDeadcodeGate_TestFlagSpellings(t *testing.T) {
+	t.Parallel()
+	const run = "go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) "
+	const tail = " ./...) || exit 1; test -z \"$$out\"\n"
+	for flag, wantTest := range map[string]bool{"-test": true, "--test": true, "-test=true": true, "--test=true": true, "-test=false": false} {
+		recipe := "\t@out=$$(" + run + flag + tail
+		lib := checks.CheckDeadcodeGate(deadcodeRepo(t, recipe, false), values.Values{})
+		tool := checks.CheckDeadcodeGate(deadcodeRepo(t, recipe, true), values.Values{})
+		if wantTest && (len(lib) != 0 || len(tool) != 1 || !strings.Contains(tool[0].Msg, "runs with -test")) {
+			t.Errorf("%s: want library pass and tool finding, got %v / %v", flag, lib, tool)
+		}
+		if !wantTest && (len(lib) != 1 || !strings.Contains(lib[0].Msg, "no main package") || len(tool) != 0) {
+			t.Errorf("%s: want library finding and tool pass, got %v / %v", flag, lib, tool)
+		}
 	}
 }
