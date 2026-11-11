@@ -86,37 +86,41 @@ func TestRun_ExceptionSuppressesFinding(t *testing.T) {
 	}
 }
 
-// TestRun_LegacyValuesFileStillHonored: a repo that has not yet moved its
-// repo-standard.json under docs/ keeps its declared exceptions.
+// TestRun_LegacyValuesFileStillHonored: a repo that still holds its exceptions
+// under the tool's old name (docs/conform.json, or conform.json at the root)
+// keeps them until its own pin bump moves the file.
 //
-// This is the migration's whole risk. Five of seven fleet repos declare at the
-// root, and a cutover that read only docs/repo-standard.json would drop their
-// exceptions the next time repo-standard ran — every rule they had excused firing at
-// once, with the one finding that explains why buried among them. Read the
-// root copy, and report it as a root-minimal stray: the repo keeps working and
-// still learns it must move.
+// This is the rename's whole risk. Every fleet repo holds an old-name file, and
+// a cutover that read only docs/repo-standard.json would drop their exceptions
+// the next time repo-standard ran, every rule they had excused firing at once,
+// with the one finding that explains why buried among them. Read the old file,
+// and report it as retired: the repo keeps working and still learns it must move.
 func TestRun_LegacyValuesFileStillHonored(t *testing.T) {
-	files := goodRepo()
-	// Break the codex shape…
-	files[".github/workflows/codex-review.yml"] = strings.Replace(
-		goodCodexYML, "issue_comment:\n    types: [created]", "pull_request:", 1)
-	// …and declare the exception at the ROOT, where it lived before the move.
-	delete(files, checks.ValuesFile)
-	files[checks.LegacyValuesFile] = `{"profile": "tool", "exceptions": [
+	for _, old := range checks.LegacyValuesFiles {
+		t.Run(old, func(t *testing.T) {
+			files := goodRepo()
+			// Break the codex shape…
+			files[".github/workflows/codex-review.yml"] = strings.Replace(
+				goodCodexYML, "issue_comment:\n    types: [created]", "pull_request:", 1)
+			// …and declare the exception under the old name.
+			delete(files, checks.ValuesFile)
+			files[old] = `{"profile": "tool", "exceptions": [
 		{"rule": "codex-workflow", "reason": "this repo pays for auto-review deliberately"}]}`
-	dir := writeRepo(t, files)
+			dir := writeRepo(t, files)
 
-	findings := checks.Run(dir)
-	if n := rulesOf(findings)[checks.RuleCodexShape]; n != 0 {
-		t.Errorf("root repo-standard.json exception ignored: %d finding(s): %v", n, findings)
-	}
-	// The root copy is read, not blessed: it is still a stray to move.
-	if n := rulesOf(findings)[checks.RuleRootMinimal]; n == 0 {
-		t.Error("root repo-standard.json produced no root-minimal finding")
-	}
-	// And it must not ALSO be reported as a missing values file.
-	if n := rulesOf(findings)[checks.RuleValuesFile]; n != 0 {
-		t.Errorf("values-file finding raised despite a readable root copy: %v", findings)
+			findings := checks.Run(dir)
+			if n := rulesOf(findings)[checks.RuleCodexShape]; n != 0 {
+				t.Errorf("%s exception ignored: %d finding(s): %v", old, n, findings)
+			}
+			// The old file is read, not blessed: it must be renamed.
+			if n := rulesOf(findings)[checks.RuleRetiredFiles]; n == 0 {
+				t.Errorf("%s produced no retired-files finding", old)
+			}
+			// And it must not ALSO be reported as a missing values file.
+			if n := rulesOf(findings)[checks.RuleValuesFile]; n != 0 {
+				t.Errorf("values-file finding raised despite a readable %s: %v", old, findings)
+			}
+		})
 	}
 }
 
@@ -127,7 +131,7 @@ func TestRun_LegacyValuesFileStillHonored(t *testing.T) {
 func TestRun_InvalidDocsValuesFileDoesNotFallBack(t *testing.T) {
 	files := goodRepo()
 	files[checks.ValuesFile] = `{"profile": "tool", "exceptions": [{"rule": "x"}]}`
-	files[checks.LegacyValuesFile] = goodValues
+	files[checks.LegacyValuesFiles[1]] = goodValues
 	dir := writeRepo(t, files)
 
 	if n := rulesOf(checks.Run(dir))[checks.RuleValuesFile]; n == 0 {

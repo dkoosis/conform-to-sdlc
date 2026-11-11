@@ -140,3 +140,24 @@ func TestRunFleet_ExceptionFromRepoValues(t *testing.T) {
 		}
 	}
 }
+
+// TestRunFleet_ExceptionFromOldNameFile: a repo not yet migrated still holds
+// docs/conform.json; its exceptions apply to its fleet findings until it moves.
+func TestRunFleet_ExceptionFromOldNameFile(t *testing.T) {
+	responses := allFleetResponses(conformingRepoResponses)
+	responses["repos/dkoosis/keyring"] = `{"default_branch":"main","allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":false}`
+	valuesJSON := `{"profile": "lib", "exceptions": [{"rule": "merge-policy", "reason": "finished micro-lib; branch cleanup is manual by choice"}]}`
+	responses["repos/dkoosis/keyring/contents/docs/conform.json"] = fmt.Sprintf(`{"content":%q}`, base64.StdEncoding.EncodeToString([]byte(valuesJSON)))
+	restore := checks.SetGHAPI(ghStub(responses))
+	defer restore()
+
+	findings, err := checks.RunFleet(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range findings {
+		if f.File == "dkoosis/keyring" && f.Rule == checks.RuleMergePolicy {
+			t.Errorf("excepted merge-policy still reported: %v", f)
+		}
+	}
+}

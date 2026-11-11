@@ -28,7 +28,8 @@ var retiredFiles = []string{
 // A repo that still has the old file would otherwise lose its exceptions
 // without a word; presence is a finding that names the rename.
 var renamedFiles = map[string]string{
-	"docs/conform.json": "docs/repo-standard.json",
+	"docs/conform.json": ValuesFile,
+	"conform.json":      ValuesFile,
 }
 
 // checkRetiredFiles reports any retired or renamed file still present.
@@ -39,7 +40,7 @@ func checkRetiredFiles(dir string) []Finding {
 			findings = append(findings, Finding{
 				File:   old,
 				Rule:   RuleRetiredFiles,
-				Msg:    "renamed — the tool is now repo-standard and reads " + now + "; the old file is ignored",
+				Msg:    "renamed — the tool is now repo-standard and reads " + now + "; the old file is honored only until it moves",
 				Repair: fmt.Sprintf("git mv %s %s", old, now),
 			})
 		}

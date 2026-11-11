@@ -238,7 +238,7 @@ func mergePolicyFindings(full string, s *repoSettings) []Finding {
 }
 
 // fleetValues fetches a repo's docs/repo-standard.json so its declared exceptions apply
-// to fleet findings too, falling back to the root copy (LegacyValuesFile) while
+// to fleet findings too, falling back to the old-name files (LegacyValuesFiles) while
 // the fleet migrates. Missing or invalid → no exceptions (Surface 1 of
 // that repo owns the values-file finding).
 //
@@ -249,8 +249,8 @@ func mergePolicyFindings(full string, s *repoSettings) []Finding {
 func fleetValues(ctx context.Context, full string) values.Values {
 	none := values.Values{Profile: values.ProfileTool}
 	data, err := ghAPI(ctx, "repos/"+full+"/contents/"+ValuesFile)
-	if err != nil {
-		data, err = ghAPI(ctx, "repos/"+full+"/contents/"+LegacyValuesFile)
+	for i := 0; err != nil && i < len(LegacyValuesFiles); i++ {
+		data, err = ghAPI(ctx, "repos/"+full+"/contents/"+LegacyValuesFiles[i])
 	}
 	if err != nil {
 		return none

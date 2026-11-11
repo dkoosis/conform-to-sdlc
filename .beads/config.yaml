@@ -70,4 +70,4 @@
 # config matches. Keep both in sync when either changes.
 issue-prefix: "cfm"
 custom.plan_dir: /Users/vcto/Projects/dk/Project/conform/plans
-sync.remote: "git+https://github.com/dkoosis/repo-standard-to-sdlc.git"
+sync.remote: "git+https://github.com/dkoosis/repo-standard.git"

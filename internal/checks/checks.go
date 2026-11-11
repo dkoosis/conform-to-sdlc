@@ -25,18 +25,14 @@ import (
 // own file wherever it says, so it says docs/.
 const ValuesFile = "docs/repo-standard.json"
 
-// LegacyValuesFile is where the file sat before ValuesFile moved it, and
-// repo-standard still reads it when docs/ has none. Five of seven fleet repos declare
-// their profile and exceptions at the root today; a cutover that read only
-// ValuesFile would drop every one of those exceptions on the next sweep, so
-// each repo would light up with findings it had already excused — and the
-// values-file finding pointing at the move would be buried in them.
-//
-// Reading it is not blessing it: root-minimal still reports a root repo-standard.json
-// with `git mv` as the repair. Read here, flagged there — that pairing is what
-// lets a repo move on its own schedule instead of all at once. Delete this
-// constant and its fallback once no fleet repo declares at the root.
-const LegacyValuesFile = "repo-standard.json"
+// LegacyValuesFiles are where the file sat under the tool's old name,
+// conform-to-sdlc, best first: docs/ and then the root, where five of seven
+// fleet repos declared it. repo-standard still reads them when ValuesFile is
+// absent, so a repo keeps its profile and exceptions until its own pin bump
+// moves the file; checkRetiredFiles reports the rename as a finding. Reading
+// is not blessing: read here, flagged there. Delete this list and its
+// fallbacks once no fleet repo holds an old-name file.
+var LegacyValuesFiles = []string{"docs/conform.json", "conform.json"}
 
 // Surface-1 rule ids. Other surfaces reserve their own ids in the same
 // vocabulary (e.g. `no-git-ops`, honored by --local for repos like loto that
@@ -115,8 +111,8 @@ func Run(dir string) []Finding {
 	return findings
 }
 
-// loadValues reads docs/repo-standard.json (ValuesFile), falling back to the root
-// (LegacyValuesFile) while the fleet migrates. Absent or invalid, the checks
+// loadValues reads docs/repo-standard.json (ValuesFile), falling back to the
+// old-name files (LegacyValuesFiles) while the fleet migrates. Absent or invalid, the checks
 // still run — under the default tool profile with no exceptions — and the
 // values problem is reported as a finding of its own.
 //
@@ -128,8 +124,10 @@ func loadValues(dir string) (values.Values, []Finding) {
 	path := filepath.Join(dir, ValuesFile)
 	v, err := values.Load(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		if legacy, lerr := values.Load(filepath.Join(dir, LegacyValuesFile)); lerr == nil {
-			return *legacy, nil
+		for _, old := range LegacyValuesFiles {
+			if legacy, lerr := values.Load(filepath.Join(dir, old)); lerr == nil {
+				return *legacy, nil
+			}
 		}
 	}
 	if err != nil {
