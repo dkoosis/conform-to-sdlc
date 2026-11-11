@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -192,12 +193,17 @@ type fuzzPkg struct {
 type fuzzRunSet struct {
 	entries []fuzzEntry
 	scope   []fuzzPkg // packages the -list and go list commands cover
+	listed  bool      // a go test -list command discovers the names
 }
 
 var (
 	goTestCmd = regexp.MustCompile(`\bgo\s+test\b`)
 	goListCmd = regexp.MustCompile(`\bgo\s+list\b`)
 	stmtSplit = regexp.MustCompile(`;|&&|\|\||\n`)
+	// continuation joins a backslash-continued command into one line.
+	continuation = regexp.MustCompile(`\\\n\s*`)
+	// valuedFlags take their value as the next token when written `-flag value`.
+	valuedFlags = []string{"-run", "-fuzz", "-fuzztime", "-fuzzminimizetime", "-list", "-timeout", "-count", "-parallel", "-cpu", "-tags", "-bench", "-benchtime", "-coverprofile", "-o"}
 )
 
 // fuzzRuns reads every go test -fuzz command, and the -list and go list
@@ -205,6 +211,7 @@ var (
 func fuzzRuns(cmds []string) fuzzRunSet {
 	var set fuzzRunSet
 	for _, c := range cmds {
+		c = continuation.ReplaceAllString(c, " ")
 		cwd := "."
 		for _, piece := range stmtSplit.Split(c, -1) {
 			fields := strings.Fields(piece)
@@ -216,8 +223,11 @@ func fuzzRuns(cmds []string) fuzzRunSet {
 			switch {
 			case isTest && strings.Contains(piece, "-fuzz"):
 				set.entries = append(set.entries, fuzzEntry{names: fuzzNames(piece), pkgs: pkgArgs(piece, cwd)})
-			case isTest && strings.Contains(piece, "-list"), goListCmd.MatchString(piece):
-				set.scope = append(set.scope, pkgArgs(piece, cwd)...)
+			case isTest && strings.Contains(piece, "-list"):
+				set.listed = true
+				set.scope = append(set.scope, literalPkgs(pkgArgs(piece, cwd))...)
+			case goListCmd.MatchString(piece):
+				set.scope = append(set.scope, literalPkgs(pkgArgs(piece, cwd))...)
 			}
 		}
 	}
@@ -250,8 +260,14 @@ func pkgArgs(piece, cwd string) []fuzzPkg {
 		loc = goListCmd.FindStringIndex(piece)
 	}
 	var pkgs []fuzzPkg
+	skip := false
 	for tok := range strings.FieldsSeq(piece[loc[1]:]) {
+		tok = strings.Trim(tok, `);"'`)
 		switch {
+		case skip:
+			skip = false
+		case strings.HasPrefix(tok, "-"):
+			skip = !strings.Contains(tok, "=") && slices.Contains(valuedFlags, tok)
 		case strings.HasPrefix(tok, "$"):
 			pkgs = append(pkgs, fuzzPkg{any: true})
 		case strings.HasPrefix(tok, "."):
@@ -264,26 +280,42 @@ func pkgArgs(piece, cwd string) []fuzzPkg {
 	return pkgs
 }
 
+// literalPkgs drops the variable packages: a loop variable ranges over what
+// the go list command prints, which is the scope.
+func literalPkgs(pkgs []fuzzPkg) []fuzzPkg {
+	var out []fuzzPkg
+	for _, p := range pkgs {
+		if !p.any {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // cover says whether some go test -fuzz command runs the function: its name
 // matches and its packages (for a variable, the discovered ones) include the
 // function's directory.
 func (s fuzzRunSet) cover(f fuzzFunc) bool {
 	fdir := path.Dir(f.file)
 	for _, e := range s.entries {
-		if e.names != nil && !e.names.MatchString(f.name) {
-			continue
+		nameOK := e.names == nil && s.listed || e.names != nil && e.names.MatchString(f.name)
+		if nameOK && s.entryRunsDir(e, fdir) {
+			return true
 		}
-		for _, p := range e.pkgs {
-			switch {
-			case p.any && len(s.scope) == 0:
-				return true
-			case p.any:
-				if pkgsInclude(s.scope, fdir) {
-					return true
-				}
-			case pkgsInclude([]fuzzPkg{p}, fdir):
-				return true
-			}
+	}
+	return false
+}
+
+// entryRunsDir says whether the command's packages include dir; a variable
+// package ranges over the discovery commands' scope, or everything with none.
+func (s fuzzRunSet) entryRunsDir(e fuzzEntry, dir string) bool {
+	for _, p := range e.pkgs {
+		pkgs := []fuzzPkg{p}
+		if p.any && len(s.scope) > 0 {
+			pkgs = s.scope
+		}
+		if pkgsInclude(pkgs, dir) {
+			return true
 		}
 	}
 	return false

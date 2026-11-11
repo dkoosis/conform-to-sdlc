@@ -136,3 +136,35 @@ func TestFuzzCoverage_ScopeAndComments(t *testing.T) {
 		t.Errorf("helper with a result produced %v", got)
 	}
 }
+
+func TestFuzzCoverage_Shapes(t *testing.T) {
+	t.Parallel()
+	pkgA := "package a\nimport \"testing\"\nfunc FuzzParse(f *testing.F) {}\n"
+	two := map[string]string{"a/a_test.go": pkgA, "b/b_test.go": pkgA}
+
+	// A go test split over a backslash continuation is one command.
+	if got := fuzzRepo(t, "\tgo test -run '^$$' \\\n\t\t-fuzz '^FuzzParse$$' ./...\n", two); len(got) != 0 {
+		t.Errorf("continued go test produced %v", got)
+	}
+	// The nested loop (sdlc's shape) over ./... covers both; over ./a only a.
+	nested := func(list string) string {
+		return "\t@for pkg in $$(go list " + list + "); do for f in $$(go test -list '^Fuzz' $$pkg | sed -n '/^Fuzz/p'); do go test -run '^$$' -fuzz \"^$$f$$\" -fuzztime=$(FUZZTIME) $$pkg || exit 1; done; done\n"
+	}
+	if got := fuzzRepo(t, nested("./..."), two); len(got) != 0 {
+		t.Errorf("nested loop over ./... produced %v", got)
+	}
+	if got := fuzzRepo(t, nested("./a"), two); len(got) != 1 || !strings.Contains(got[0].Msg, "b/b_test.go") {
+		t.Errorf("nested loop over ./a: want only b/b_test.go unrun, got %v", got)
+	}
+	// A variable flag value is not a package.
+	got := fuzzRepo(t, "\tgo test -run '^$$' -fuzz '^FuzzParse$$' -fuzztime $(FUZZTIME) ./a\n", two)
+	if len(got) != 1 || !strings.Contains(got[0].Msg, "b/b_test.go") {
+		t.Errorf("space-form flag variable: want only b/b_test.go unrun, got %v", got)
+	}
+	// A variable -fuzz value names nothing without a go test -list behind it.
+	lit := "\t@for f in FuzzA; do go test -run '^$$' -fuzz \"^$$f$$\" ./pkg || exit 1; done\n"
+	got = fuzzRepo(t, lit, map[string]string{"pkg/a_test.go": twoFuzz})
+	if len(got) != 2 {
+		t.Errorf("literal loop with no list: want both unrun, got %v", got)
+	}
+}
