@@ -457,6 +457,7 @@ func TestLintPack_RuleguardDSL(t *testing.T) {
 		"import only in the hidden pack":      {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
 		"import only under an underscore dir": {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", files: map[string]string{"_tools/tools.go": "package tools\n\nimport _ \"github.com/quasilyte/go-ruleguard/dsl\"\n"}, fails: true},
 		"import only in a build-ignored file": {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", files: map[string]string{"tools.go": "//go:build ignore\n\npackage tools\n\nimport _ \"github.com/quasilyte/go-ruleguard/dsl\"\n"}, fails: true},
+		"import only in a nested module":      {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", files: map[string]string{"tools/go.mod": "module example.com/tools\n\ngo 1.26\n", "tools/tools.go": "//go:build tools\n\npackage tools\n\nimport _ \"github.com/quasilyte/go-ruleguard/dsl\"\n"}, fails: true},
 		"another tool does not count":         {gomod: head + "\ntool golang.org/x/tools/cmd/deadcode\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
 	}
 	for name, tc := range tests {

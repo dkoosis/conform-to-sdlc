@@ -143,6 +143,11 @@ func importsDSL(dir string) bool {
 			if path != dir && (strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_") || slices.Contains(sourceSkipDirs, d.Name())) {
 				return filepath.SkipDir
 			}
+			if path != dir {
+				if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+					return filepath.SkipDir // a nested module does not satisfy this go.mod
+				}
+			}
 			return nil
 		}
 		if !strings.HasSuffix(d.Name(), ".go") || strings.HasPrefix(d.Name(), "_") {
