@@ -26,6 +26,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/dkoosis/conform-to-sdlc/internal/lintpack"
 	"github.com/dkoosis/conform-to-sdlc/internal/values"
 )
 
@@ -151,8 +152,20 @@ var baseArtifacts = []artifact{
 // same constants the verify halves read, so a rule that renames its file
 // renames the emitted one too.
 func scaffoldArtifacts() []artifact {
-	arts := make([]artifact, 0, len(baseArtifacts)+len(trackedHookEvents))
+	arts := make([]artifact, 0, len(baseArtifacts)+len(lintpack.Members)+len(trackedHookEvents))
 	arts = append(arts, baseArtifacts...)
+	// The lint rules pack: the required files lint-pack reads, from the same
+	// embed it compares against.
+	for _, m := range lintpack.Members {
+		if !m.Required {
+			continue
+		}
+		arts = append(arts, artifact{
+			path: filepath.Join(lintpack.Dir, m.Repo),
+			mode: 0o644,
+			body: renderPackFile(m.Source),
+		})
+	}
 	// The hook family: one file per event the local surface tracks, each
 	// delegating to bd by the marker checkBDHooks looks for.
 	for _, event := range trackedHookEvents {
@@ -350,6 +363,17 @@ func renderGolangci(ScaffoldSpec) string {
 	b.WriteString("      require-explanation: true\n")
 	b.WriteString("      require-specific: true\n")
 	return b.String()
+}
+
+// renderPackFile emits one lintbrush pack file from the embed lint-pack reads.
+func renderPackFile(source string) func(ScaffoldSpec) string {
+	return func(ScaffoldSpec) string {
+		body, err := lintpack.Bytes(source)
+		if err != nil { // a Members entry is always embedded; lintpack's tests hold that
+			panic(err)
+		}
+		return string(body)
+	}
 }
 
 // renderProjectConf emits the one pin location checkLintPin reads. No other

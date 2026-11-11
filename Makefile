@@ -12,7 +12,7 @@ SHELL := /bin/bash
 include .sandbox/lib/Makefile.doctor.mk
 include .sandbox/lib/Makefile.cross.mk
 
-.PHONY: help check audit vet lint test race fuzz build vuln dupe nilcheck deadcode install deploy clean pack-drift
+.PHONY: help check audit vet lint test race fuzz build vuln dupe nilcheck deadcode install deploy clean pack-refresh
 
 # Serialize golangci-lint through the machine-global mkdir mutex (see script
 # header — golangci-lint's cache lock fails exit-3 on contention instead of
@@ -35,7 +35,7 @@ help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_.-]+:.*?## / { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@printf '\n'
 
-check: vet lint pack-drift test build selfcheck ## Fast validation: vet + lint + test + build + conform-to-sdlc on itself
+check: vet lint test build selfcheck ## Fast validation: vet + lint + test + build + conform-to-sdlc on itself
 	@echo "=== check pass ==="
 
 audit: check race fuzz dupe nilcheck deadcode vuln ## Exhaustive validation
@@ -124,5 +124,9 @@ clean: ## Remove built binary + sandbox build artifacts
 	@rm -rf .sandbox/bin/linux-amd64 .sandbox/bin/linux-arm64 .sandbox/cache
 	@echo "=== clean ==="
 
-pack-drift: ## Fail if the copied lintbrush pack rules drifted from upstream (network-soft)
-	@.golangci-rules/check-pack-drift.sh
+# The lint rules pack is embedded (internal/lintpack/_gorules) and selfcheck's
+# lint-pack rule compares .golangci-rules/ with it, offline. To take a new pack,
+# commit it to dkoosis/lintbrush, then run this against that checkout.
+LINTBRUSH ?= $(HOME)/Projects/dk/lintbrush
+pack-refresh: ## Refresh the embedded lintbrush rules pack from LINTBRUSH's HEAD and sync .golangci-rules/
+	bash scripts/pack-refresh "$(LINTBRUSH)"

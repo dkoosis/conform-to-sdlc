@@ -52,7 +52,7 @@ func checkLintFloor(dir string) []Finding {
 			File:   file,
 			Rule:   RuleLintFloor,
 			Msg:    "no .golangci.yml — the repo runs without the fleet lint floor",
-			Repair: "copy the baseline (plugins/lintbrush/gorules/golangci.baseline.yml) and add per-repo extras",
+			Repair: "copy the baseline (dkoosis/lintbrush gorules/golangci.baseline.yml) and add per-repo extras",
 		}}
 	}
 

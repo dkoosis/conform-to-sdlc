@@ -47,6 +47,7 @@ const (
 	RuleMakefileDocs    = "makefile-docs"        // every target carries a ## doc comment
 	RuleLintFloor       = "lint-floor"           // .golangci.yml carries the 6-linter baseline floor
 	RuleLintContext     = "lint-contextcheck"    // contextcheck must stay demoted
+	RuleLintPack        = "lint-pack"            // .golangci-rules/ is byte-equal to the lintbrush pack conform-to-sdlc embeds
 	RuleLintPin         = "lint-pin"             // exactly one golangci-lint pin location
 	RuleCIGate          = "ci-gate"              // CI calls make check; no gate re-implemented in YAML
 	RuleCodexShape      = "codex-workflow"       // codex-review fires on issue_comment, never pull_request
@@ -81,6 +82,7 @@ func Run(dir string) []Finding {
 
 	findings = append(findings, checkMakefile(dir, vals.Profile)...)
 	findings = append(findings, checkLintFloor(dir)...)
+	findings = append(findings, checkLintPack(dir)...)
 	findings = append(findings, checkLintPin(dir)...)
 	findings = append(findings, checkCIGate(dir)...)
 	findings = append(findings, checkCIDocsSkip(dir)...)

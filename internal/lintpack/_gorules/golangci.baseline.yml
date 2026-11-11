@@ -1,0 +1,76 @@
+# bugclasses baseline — the shared strict floor for dk's 9 Go repos.
+# (ccp-sbp.2, epic ccp-sbp; decision nug d7ea466a8172.)
+#
+# This is the MINIMUM error-handling floor every repo runs, distinct from the
+# bugclasses *rule pack* (golangci.snippet.yml — ruleguard/forbidigo AST rules).
+# The two compose: merge BOTH blocks into a repo's .golangci.yml. This file
+# owns the general-purpose linters; the snippet owns the six custom rules.
+#
+# Why these six: the 9-repo scan (604 defects) put error-swallowing alone at
+# 81 defects, most linter-preventable. This floor makes that class fail CI.
+#
+#   errcheck      unchecked error return (the 81-defect class), STRICT — the
+#                 only exclusions are calls whose error is genuinely discardable
+#                 (Close on a reader, fmt.Fprint* to a known-good writer). No
+#                 blanket package/path ignores.
+#   nilerr        `return nil` after a non-nil err check — swallows the error
+#   rowserrcheck  database/sql Rows.Err() not checked after iteration (no-op in
+#                 a repo with no database/sql import — cheap to carry everywhere)
+#   noctx         http/exec call built without a context
+#   staticcheck   the SA correctness suite (a golangci default; pinned here so
+#                 the floor is explicit, not implied)
+#   nolintlint    every //nolint carries a reason and a specific linter — the
+#                 reason IS the audit trail for a deliberate exception
+#
+# `default: standard` keeps golangci's own defaults (errcheck, govet,
+# ineffassign, staticcheck, unused) under the floor, so a repo that hasn't
+# listed errcheck/staticcheck still gets them. A repo's richer config layers
+# on top — this only guarantees the floor is never below these six.
+#
+# NOT in the floor — contextcheck (advisory/opt-in, see the block below).
+# Validation across the 9 mains found it FP-dominated: it re-raises the
+# `context.Background` defect class WITHOUT path-scoping (firing on deliberate
+# detached contexts — background audit writes, goroutines that must outlive the
+# request), plus a large "should pass the context parameter" tail on cmd/
+# startup, schema-init DDL, and test files. That defect class is already owned,
+# tuned, by the bugclasses pack's forbidigo rule 5 (golangci.snippet.yml) —
+# path-scoped per repo to daemon packages. Enabling contextcheck on top would
+# reintroduce exactly the noise rule 5 scopes away. Opt in per repo only after
+# triaging its findings (counts in README §rollout).
+
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - nilerr
+    - rowserrcheck
+    - noctx
+    - staticcheck    # explicit: a default, but the floor names it
+    - nolintlint
+    # contextcheck: intentionally NOT enabled — advisory only. To opt in after
+    # triage, uncomment and scope it like rule 5 (exclude cmd/, main.go, _test):
+    #   - contextcheck
+
+  settings:
+    errcheck:
+      # STRICT. exclude-functions lists only calls whose dropped error is
+      # genuinely fine — never a path/package blanket. Extend per-repo ONLY
+      # for the same shape (a Close on a read-only handle, a printer to a
+      # writer that cannot fail). A real unchecked error stays a finding.
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Print
+        - fmt.Printf
+        - fmt.Println
+
+    nolintlint:
+      require-explanation: true   # //nolint without a reason fails
+      require-specific: true      # //nolint must name the linter
+
+  exclusions:
+    generated: lax

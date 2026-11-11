@@ -1,11 +1,13 @@
 package checks_test
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/conform-to-sdlc/internal/lintpack"
 )
 
 // goodMakefile satisfies the four-verb contract for the tool profile.
@@ -107,7 +109,7 @@ sync:
 // goodRepo is a complete conforming tool repo, minus bd state (tests stub bd
 // on PATH via fakeBD).
 func goodRepo() map[string]string {
-	return map[string]string{
+	files := map[string]string{
 		"docs/conform.json":                  goodValues,
 		".beads/config.yaml":                 goodBDConfig,
 		"Makefile":                           goodMakefile,
@@ -119,6 +121,24 @@ func goodRepo() map[string]string {
 		".githooks/pre-commit":               "#!/bin/sh\nexit 0\n",
 		".githooks/pre-push":                 "#!/bin/sh\nexit 0\n",
 	}
+	maps.Copy(files, packFiles())
+	return files
+}
+
+// packFiles is the required lint rules pack, as a repo holds it.
+func packFiles() map[string]string {
+	files := map[string]string{}
+	for _, m := range lintpack.Members {
+		if !m.Required {
+			continue
+		}
+		body, err := lintpack.Bytes(m.Source)
+		if err != nil {
+			panic(err)
+		}
+		files[lintpack.Dir+"/"+m.Repo] = string(body)
+	}
+	return files
 }
 
 // writeRepo materializes files (path → content) under a fresh temp dir.

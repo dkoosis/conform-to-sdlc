@@ -9,6 +9,7 @@ var (
 	CheckMakefile     = checkMakefile
 	CheckLintFloor    = checkLintFloor
 	CheckLintPin      = checkLintPin
+	CheckLintPack     = checkLintPack
 	CheckCIGate       = checkCIGate
 	CheckCIDocsSkip   = checkCIDocsSkip
 	CheckCodexShape   = checkCodexShape
