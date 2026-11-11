@@ -148,12 +148,13 @@ var (
 // reason each: {"rule": "deadcode-filter", "allow": {"<function>": "<why>"}}.
 func checkDeadcodeGate(dir string, vals values.Values) []Finding {
 	cmds, _ := gateRecipes(dir, "deadcode")
-	var text string
+	var sb strings.Builder
 	for _, c := range cmds {
 		if deadcodeRun.MatchString(blankQuotes(c.text)) {
-			text += c.text + "\n"
+			sb.WriteString(c.text + "\n")
 		}
 	}
+	text := sb.String()
 	if text == "" {
 		return nil // no deadcode step to read; makefile-verbs owns a missing target
 	}
@@ -184,13 +185,18 @@ func deadcodeRootFindings(text string, hasMain bool) []Finding {
 	return nil
 }
 
-func deadcodeFilterFindings(text string, vals values.Values) []Finding {
-	allowed := map[string]string{}
+// allowList is the functions the repo's deadcode-filter exception allows.
+func allowList(vals values.Values) map[string]string {
 	for _, e := range vals.Exceptions {
 		if e.Rule == values.FilterRule {
-			allowed = e.Allow
+			return e.Allow
 		}
 	}
+	return nil
+}
+
+func deadcodeFilterFindings(text string, vals values.Values) []Finding {
+	allowed := allowList(vals)
 	patterns, other := deadcodeFilters(text)
 	if len(patterns) == 0 && len(other) == 0 && len(allowed) == 0 {
 		return nil
@@ -260,7 +266,7 @@ func filterArgs(seg string) []string {
 		args = append(args, q[1:len(q)-1])
 		return " "
 	})
-	for _, f := range strings.Fields(rest) {
+	for f := range strings.FieldsSeq(rest) {
 		if !strings.HasPrefix(f, "-") {
 			args = append(args, f)
 		}
@@ -287,16 +293,20 @@ func hasMainPackage(dir string) bool {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			return nil
-		}
-		src, err := os.ReadFile(path) //nolint:gosec // G304: path comes from walking the repo
-		if err == nil && packageMain.Match(src) && !buildIgnore.Match(src) {
-			found = true
-		}
+		found = isMainFile(path, name)
 		return nil
 	})
 	return found
+}
+
+// isMainFile says whether the non-test Go file at path is package main and
+// built by default.
+func isMainFile(path, name string) bool {
+	if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+		return false
+	}
+	src, err := os.ReadFile(path)
+	return err == nil && packageMain.Match(src) && !buildIgnore.Match(src)
 }
 
 // maskQuotes blanks each quoted string to spaces of the same length, so an

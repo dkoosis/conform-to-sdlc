@@ -130,6 +130,34 @@ func Load(path string) (*Values, error) {
 	return v, nil
 }
 
+// validate checks one exception: a rule id, a reason (or the drop or allow
+// list that stands in for one), and a drop or allow only on its own rule.
+func (exc Exception) validate() error {
+	if exc.Rule == "" {
+		return ErrEmptyRule
+	}
+
+	if len(exc.Drop) > 0 && exc.Rule != DropRule {
+		return fmt.Errorf("rule %q: %w", exc.Rule, ErrDropRule)
+	}
+
+	if (len(exc.Allow) > 0) != (exc.Rule == FilterRule) {
+		return fmt.Errorf("rule %q: %w", exc.Rule, ErrAllowRule)
+	}
+
+	for fn, why := range exc.Allow {
+		if strings.TrimSpace(fn) == "" || strings.TrimSpace(why) == "" {
+			return fmt.Errorf("rule %q, function %q: %w", exc.Rule, fn, ErrAllowReason)
+		}
+	}
+
+	if exc.Reason == "" && len(exc.Drop) == 0 && len(exc.Allow) == 0 {
+		return fmt.Errorf("rule %q: %w", exc.Rule, ErrEmptyReason)
+	}
+
+	return nil
+}
+
 // validate checks profile membership and per-exception invariants: every
 // exception names a non-empty rule and reason, and no rule id repeats.
 func (v *Values) validate() error {
@@ -140,26 +168,8 @@ func (v *Values) validate() error {
 	seen := make(map[string]bool, len(v.Exceptions))
 
 	for i, exc := range v.Exceptions {
-		if exc.Rule == "" {
-			return fmt.Errorf("exception %d: %w", i, ErrEmptyRule)
-		}
-
-		if len(exc.Drop) > 0 && exc.Rule != DropRule {
-			return fmt.Errorf("exception %d (rule %q): %w", i, exc.Rule, ErrDropRule)
-		}
-
-		if (len(exc.Allow) > 0) != (exc.Rule == FilterRule) {
-			return fmt.Errorf("exception %d (rule %q): %w", i, exc.Rule, ErrAllowRule)
-		}
-
-		for fn, why := range exc.Allow {
-			if strings.TrimSpace(fn) == "" || strings.TrimSpace(why) == "" {
-				return fmt.Errorf("exception %d (rule %q, function %q): %w", i, exc.Rule, fn, ErrAllowReason)
-			}
-		}
-
-		if exc.Reason == "" && len(exc.Drop) == 0 && len(exc.Allow) == 0 {
-			return fmt.Errorf("exception %d (rule %q): %w", i, exc.Rule, ErrEmptyReason)
+		if err := exc.validate(); err != nil {
+			return fmt.Errorf("exception %d: %w", i, err)
 		}
 
 		if seen[exc.Rule] {

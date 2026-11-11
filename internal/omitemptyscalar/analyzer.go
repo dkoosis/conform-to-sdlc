@@ -81,9 +81,9 @@ func checkField(pass *analysis.Pass, field *ast.Field) {
 	}
 }
 
-// ignoreMarker is the comment form golangci-lint does not read. golangci's
-// nolint filter warns "unknown linters in //nolint directives" for a name it
-// does not run, and no setting turns that off, so a repo that wants a clean
+// ignoreMarker is the comment form golangci-lint does not read. Its nolint
+// filter warns about an unknown linter name in a nolint directive and no
+// setting turns that off, so a repo that wants a clean
 // lint run writes `//omitemptyscalar:ignore <reason>` instead. The reason is
 // required here: the marker without one silences nothing.
 const ignoreMarker = "omitemptyscalar:ignore"

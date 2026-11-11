@@ -98,7 +98,7 @@ const (
 var (
 	dslToolLine   = regexp.MustCompile(`(?m)^\s*(?:tool\s+)?` + regexp.QuoteMeta(ruleguardDSL) + `\s*$`)
 	dslToolSingle = regexp.MustCompile(`(?m)^tool\s+` + regexp.QuoteMeta(ruleguardDSL) + `\s*$`)
-	dslToolBlock  = regexp.MustCompile(`(?ms)^tool\s*\(.*?^\)`)
+	dslToolBlock  = regexp.MustCompile(`(?s)(?:^|\n)tool\s*\(.*?\n\)`)
 	dslRequire    = regexp.MustCompile(`(?m)^(?:require\s+)?\s*` + regexp.QuoteMeta(ruleguardDSL) + `\s+v`)
 	dslImport     = regexp.MustCompile(`(?m)^(?:import\s+)?\s*(?:_\s+)?"` + regexp.QuoteMeta(ruleguardDSL) + `"`)
 )

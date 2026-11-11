@@ -1,6 +1,7 @@
 package checks_test
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
@@ -11,9 +12,7 @@ import (
 func dupeRepo(t *testing.T, recipe string, extra map[string]string) string {
 	t.Helper()
 	files := map[string]string{"Makefile": withRecipe("dupe", recipe)}
-	for k, v := range extra {
-		files[k] = v
-	}
+	maps.Copy(files, extra)
 	return writeRepo(t, files)
 }
 
