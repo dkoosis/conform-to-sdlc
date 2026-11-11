@@ -447,15 +447,17 @@ func TestLintPack_RuleguardDSL(t *testing.T) {
 		files map[string]string
 		fails bool
 	}{
-		"no go.mod: silent":               {gomod: "", files: nil},
-		"nothing keeps the dsl":           {gomod: head, fails: true},
-		"require only, no import or tool": {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
-		"tool without require":            {gomod: head + "\ntool github.com/quasilyte/go-ruleguard/dsl\n", fails: true},
-		"tool line and require":           {gomod: head + dslKept},
-		"tool block and require block":    {gomod: head + "\ntool (\n\tgithub.com/quasilyte/go-ruleguard/dsl\n)\n\nrequire (\n\tgithub.com/quasilyte/go-ruleguard/dsl v0.3.23 // indirect\n)\n"},
-		"require plus tools.go import":    {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", files: map[string]string{"tools.go": "//go:build tools\n\npackage tools\n\nimport _ \"github.com/quasilyte/go-ruleguard/dsl\"\n"}},
-		"import only in the hidden pack":  {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
-		"another tool does not count":     {gomod: head + "\ntool golang.org/x/tools/cmd/deadcode\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
+		"no go.mod: silent":                   {gomod: "", files: nil},
+		"nothing keeps the dsl":               {gomod: head, fails: true},
+		"require only, no import or tool":     {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
+		"tool without require":                {gomod: head + "\ntool github.com/quasilyte/go-ruleguard/dsl\n", fails: true},
+		"tool line and require":               {gomod: head + dslKept},
+		"tool block and require block":        {gomod: head + "\ntool (\n\tgithub.com/quasilyte/go-ruleguard/dsl\n)\n\nrequire (\n\tgithub.com/quasilyte/go-ruleguard/dsl v0.3.23 // indirect\n)\n"},
+		"require plus tools.go import":        {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", files: map[string]string{"tools.go": "//go:build tools\n\npackage tools\n\nimport _ \"github.com/quasilyte/go-ruleguard/dsl\"\n"}},
+		"import only in the hidden pack":      {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
+		"import only under an underscore dir": {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", files: map[string]string{"_tools/tools.go": "package tools\n\nimport _ \"github.com/quasilyte/go-ruleguard/dsl\"\n"}, fails: true},
+		"import only in a build-ignored file": {gomod: head + "\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", files: map[string]string{"tools.go": "//go:build ignore\n\npackage tools\n\nimport _ \"github.com/quasilyte/go-ruleguard/dsl\"\n"}, fails: true},
+		"another tool does not count":         {gomod: head + "\ntool golang.org/x/tools/cmd/deadcode\nrequire github.com/quasilyte/go-ruleguard/dsl v0.3.23\n", fails: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

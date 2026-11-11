@@ -25,17 +25,20 @@ func TestDupeGate(t *testing.T) {
 		want   bool // a finding
 		msg    string
 	}{
-		"no threshold, no config":    {recipe: bare, want: true, msg: "no --threshold"},
-		"config without threshold":   {recipe: bare, files: map[string]string{".jscpd.json": `{"gitignore": true}`}, want: true, msg: `sets no "threshold"`},
-		"flag 3":                     {recipe: "\tnpx --yes jscpd@5.1.2 --threshold 3 .\n"},
-		"flag 2.5 with equals":       {recipe: "\tnpx --yes jscpd@5.1.2 --threshold=2.5 .\n"},
-		"flag 10":                    {recipe: "\tnpx --yes jscpd@5.1.2 --threshold 10 .\n", want: true, msg: "above 3%"},
-		"flag via make variable":     {recipe: "\tnpx --yes jscpd@5.1.2 --threshold $(DUPE_MAX) .\n", files: map[string]string{"Makefile": withRecipe("dupe", "\tnpx --yes jscpd@5.1.2 --threshold $(DUPE_MAX) .\n") + "DUPE_MAX := 8\n"}, want: true, msg: "above 3%"},
-		"config threshold 3":         {recipe: bare, files: map[string]string{".jscpd.json": `{"threshold": 3}`}},
-		"config threshold 10":        {recipe: bare, files: map[string]string{".jscpd.json": `{"threshold": 10}`}, want: true, msg: `"threshold": 10`},
-		"flag beats a loose config":  {recipe: "\tnpx --yes jscpd@5.1.2 --threshold 3 .\n", files: map[string]string{".jscpd.json": `{"threshold": 10}`}},
-		"config flag names a file":   {recipe: "\tnpx --yes jscpd@5.1.2 --config ci/jscpd.json .\n", files: map[string]string{"ci/jscpd.json": `{"threshold": 3}`, ".jscpd.json": `{"threshold": 10}`}},
-		"another tool, out of scope": {recipe: "\tgo run github.com/mibk/dupl@v1.0.0 ./...\n"},
+		"no threshold, no config":                {recipe: bare, want: true, msg: "no --threshold"},
+		"config without threshold":               {recipe: bare, files: map[string]string{".jscpd.json": `{"gitignore": true}`}, want: true, msg: `sets no "threshold"`},
+		"flag 3":                                 {recipe: "\tnpx --yes jscpd@5.1.2 --threshold 3 .\n"},
+		"flag 2.5 with equals":                   {recipe: "\tnpx --yes jscpd@5.1.2 --threshold=2.5 .\n"},
+		"flag 10":                                {recipe: "\tnpx --yes jscpd@5.1.2 --threshold 10 .\n", want: true, msg: "above 3%"},
+		"flag via make variable":                 {recipe: "\tnpx --yes jscpd@5.1.2 --threshold $(DUPE_MAX) .\n", files: map[string]string{"Makefile": withRecipe("dupe", "\tnpx --yes jscpd@5.1.2 --threshold $(DUPE_MAX) .\n") + "DUPE_MAX := 8\n"}, want: true, msg: "above 3%"},
+		"config threshold 3":                     {recipe: bare, files: map[string]string{".jscpd.json": `{"threshold": 3}`}},
+		"config threshold 10":                    {recipe: bare, files: map[string]string{".jscpd.json": `{"threshold": 10}`}, want: true, msg: `"threshold": 10`},
+		"flag beats a loose config":              {recipe: "\tnpx --yes jscpd@5.1.2 --threshold 3 .\n", files: map[string]string{".jscpd.json": `{"threshold": 10}`}},
+		"config flag names a file":               {recipe: "\tnpx --yes jscpd@5.1.2 --config ci/jscpd.json .\n", files: map[string]string{"ci/jscpd.json": `{"threshold": 3}`, ".jscpd.json": `{"threshold": 10}`}},
+		"other command's -t is not jscpd's":      {recipe: "\tTMP=$$(mktemp -d -t jscpd); npx --yes jscpd@5.1.2 . --threshold 3 --output $$TMP\n"},
+		"a -t on another command does not count": {recipe: "\tmktemp -d -t 2; npx --yes jscpd@5.1.2 .\n", want: true, msg: "no --threshold"},
+		"continued command":                      {recipe: "\tnpx --yes jscpd@5.1.2 . \\\n\t\t--threshold 3\n"},
+		"another tool, out of scope":             {recipe: "\tgo run github.com/mibk/dupl@v1.0.0 ./...\n"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -148,7 +151,7 @@ func TestDeadcodeFilter(t *testing.T) {
 	}{
 		"filter, no exception":     {values.Values{}, []string{"has no deadcode-filter exception"}},
 		"filter, exact allow list": {allow("hookA", "hookB"), nil},
-		"allow misses a pattern":   {allow("hookA"), []string{`"hookB" names no function`}},
+		"allow misses a pattern":   {allow("hookA"), []string{`"hookB" is not just names`}},
 		"allow lists a stale name": {allow("hookA", "hookB", "hookC"), []string{`allows "hookC"`}},
 		"filter with other tool":   {values.Values{}, nil},
 	}
@@ -213,5 +216,30 @@ func TestValues_AllowOnlyOnFilterRule(t *testing.T) {
 	ok := `{"profile":"tool","exceptions":[{"rule":"deadcode-filter","allow":{"hook":"test hook in pkg b"}}]}`
 	if _, err := values.Parse(strings.NewReader(ok)); err != nil {
 		t.Fatalf("valid allow list rejected: %v", err)
+	}
+}
+
+func TestDeadcodeFilter_AlternationCannotHideAnUnlistedFunction(t *testing.T) {
+	t.Parallel()
+	for _, pat := range []string{`'hookA\|realDead'`, `-E 'hookA|.*'`, `-E 'hookA.*'`} {
+		recipe := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v " + pat + ") || exit 1; test -z \"$$out\"\n"
+		got := checks.CheckDeadcodeGate(deadcodeRepo(t, recipe, true), allow("hookA"))
+		if len(got) != 1 || got[0].Rule != checks.RuleDeadcodeFilter || !strings.Contains(got[0].Msg, "not just names") {
+			t.Errorf("pattern %s: want one deadcode-filter finding, got %v", pat, got)
+		}
+	}
+	ok := "\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) ./cmd/x | grep -v -E 'hookA|hookB') || exit 1; test -z \"$$out\"\n"
+	if got := checks.CheckDeadcodeGate(deadcodeRepo(t, ok, true), allow("hookA", "hookB")); len(got) != 0 {
+		t.Errorf("names joined by | must pass, got %v", got)
+	}
+}
+
+func TestDeadcodeGate_ApostropheInAComment(t *testing.T) {
+	t.Parallel()
+	recipe := "\t# it's deadcode below\n\t@out=$$(go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VER) -test ./... | grep -v 'x') || exit 1\n"
+	// An unpaired quote in one command must not pair with the next: no panic, and the filter is read.
+	got := checks.CheckDeadcodeGate(deadcodeRepo(t, recipe, false), allow("x"))
+	if len(got) != 0 {
+		t.Fatalf("want none, got %v", got)
 	}
 }

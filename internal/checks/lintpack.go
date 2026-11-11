@@ -140,16 +140,16 @@ func importsDSL(dir string) bool {
 			return filepath.SkipDir
 		}
 		if d.IsDir() {
-			if path != dir && (strings.HasPrefix(d.Name(), ".") || slices.Contains(sourceSkipDirs, d.Name())) {
+			if path != dir && (strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_") || slices.Contains(sourceSkipDirs, d.Name())) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if !strings.HasSuffix(d.Name(), ".go") {
+		if !strings.HasSuffix(d.Name(), ".go") || strings.HasPrefix(d.Name(), "_") {
 			return nil
 		}
 		src, err := os.ReadFile(path) //nolint:gosec // G304: path comes from walking the repo
-		found = err == nil && dslImport.Match(src)
+		found = err == nil && dslImport.Match(src) && !buildIgnore.Match(src)
 		return nil
 	})
 	return found

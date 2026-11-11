@@ -1,7 +1,9 @@
 package checks
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -109,7 +111,7 @@ func fixAuditWorkflow(dir string) (string, error) {
 	path := filepath.Join(dir, auditWorkflowFile)
 	if _, err := os.Stat(path); err == nil {
 		return "", nil
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("stat %s: %w", auditWorkflowFile, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {

@@ -55,10 +55,11 @@ func gateRecipes(dir, target string) ([]recipeCmd, map[string]makeVar) {
 func checkDupeGate(dir string) []Finding {
 	cmds, vars := gateRecipes(dir, "dupe")
 	for _, cmd := range cmds {
-		if !jscpdRun.MatchString(blankQuotes(cmd.text)) {
+		run, ok := jscpdInvocation(cmd.text)
+		if !ok {
 			continue
 		}
-		if msg := dupeThresholdProblem(dir, cmd.text, vars); msg != "" {
+		if msg := dupeThresholdProblem(dir, run, vars); msg != "" {
 			return []Finding{{
 				File:   makefileFile,
 				Rule:   RuleDupeGate,
@@ -68,6 +69,51 @@ func checkDupeGate(dir string) []Finding {
 		}
 	}
 	return nil
+}
+
+// jscpdSegEnd ends a shell command: a separator, a pipe or a command
+// substitution's close.
+var jscpdSegEnd = regexp.MustCompile(`[;&|)]|\n`)
+
+// jscpdCommand finds jscpd run as a command: tool@version, or the word after
+// npx and its flags, or at the start of a command. A path or an argument that
+// merely says jscpd (mktemp -t jscpd) is not a run.
+func jscpdCommand(masked string) []int {
+	for _, loc := range jscpdRun.FindAllStringIndex(masked, -1) {
+		if loc[1] < len(masked) && masked[loc[1]] == '@' {
+			return loc
+		}
+		before := strings.TrimRight(masked[:loc[0]], " \t")
+		prev := before
+		if i := strings.LastIndexAny(before, " \t;&|("); i >= 0 {
+			prev = before[i+1:]
+		}
+		switch {
+		case before == "", strings.HasSuffix(before, ";"), strings.HasSuffix(before, "&"), strings.HasSuffix(before, "|"), strings.HasSuffix(before, "("),
+			prev == "npx", prev == "exec", prev == "--yes", prev == "-y", prev == "--no-install":
+			return loc
+		}
+	}
+	return nil
+}
+
+// jscpdInvocation returns the text of the jscpd command in a recipe line,
+// from the tool name to the end of that command, so a flag on another
+// command in the line (mktemp -t) is not read as jscpd's. A backslash-newline
+// continues the command.
+func jscpdInvocation(text string) (string, bool) {
+	masked := maskQuotes(strings.ReplaceAll(text, "\\\n", "  "))
+	masked = makeVarRef.ReplaceAllStringFunc(masked, func(ref string) string { return strings.Repeat("_", len(ref)) })
+	loc := jscpdCommand(masked)
+	if loc == nil {
+		return "", false
+	}
+	flat := strings.ReplaceAll(text, "\\\n", "  ")
+	end := len(masked)
+	if e := jscpdSegEnd.FindStringIndex(masked[loc[1]:]); e != nil {
+		end = loc[1] + e[0]
+	}
+	return flat[loc[0]:end], true
 }
 
 // dupeThresholdProblem says why the jscpd command text sets no threshold at
@@ -148,22 +194,26 @@ var (
 // reason each: {"rule": "deadcode-filter", "allow": {"<function>": "<why>"}}.
 func checkDeadcodeGate(dir string, vals values.Values) []Finding {
 	cmds, _ := gateRecipes(dir, "deadcode")
-	var sb strings.Builder
+	// Each command is masked on its own, so a quote left open in one (an
+	// apostrophe in a comment) cannot pair with a quote in the next.
+	var sb, masked strings.Builder
 	for _, c := range cmds {
-		if deadcodeRun.MatchString(blankQuotes(c.text)) {
+		m := maskQuotes(c.text)
+		if deadcodeRun.MatchString(m) {
 			sb.WriteString(c.text + "\n")
+			masked.WriteString(m + "\n")
 		}
 	}
-	text := sb.String()
+	text, runs := sb.String(), masked.String()
 	if text == "" {
 		return nil // no deadcode step to read; makefile-verbs owns a missing target
 	}
-	findings := deadcodeRootFindings(text, hasMainPackage(dir))
-	return append(findings, deadcodeFilterFindings(text, vals)...)
+	findings := deadcodeRootFindings(runs, hasMainPackage(dir))
+	return append(findings, deadcodeFilterFindings(text, runs, vals)...)
 }
 
-func deadcodeRootFindings(text string, hasMain bool) []Finding {
-	runs := blankQuotes(text)
+// deadcodeRootFindings reads runs, the recipe with its quoted strings masked.
+func deadcodeRootFindings(runs string, hasMain bool) []Finding {
 	i := deadcodeRun.FindStringIndex(runs)
 	hasTest := deadcodeTest.MatchString(runs[i[0]:])
 	switch {
@@ -195,9 +245,9 @@ func allowList(vals values.Values) map[string]string {
 	return nil
 }
 
-func deadcodeFilterFindings(text string, vals values.Values) []Finding {
+func deadcodeFilterFindings(text, masked string, vals values.Values) []Finding {
 	allowed := allowList(vals)
-	patterns, other := deadcodeFilters(text)
+	patterns, other := deadcodeFilters(text, masked)
 	if len(patterns) == 0 && len(other) == 0 && len(allowed) == 0 {
 		return nil
 	}
@@ -219,8 +269,8 @@ func deadcodeFilterFindings(text string, vals values.Values) []Finding {
 		findings = append(findings, finding("the deadcode target filters deadcode's output, which hides unreachable functions from the gate, and docs/repo-standard.json has no deadcode-filter exception for it", add))
 	}
 	for _, p := range patterns {
-		if len(allowed) > 0 && !slices.ContainsFunc(names, func(n string) bool { return strings.Contains(p, n) }) {
-			findings = append(findings, finding(fmt.Sprintf("the deadcode filter pattern %q names no function in the deadcode-filter allow list", p), "write each hidden function's name literally in the pattern and list it in the exception's allow, with a reason"))
+		if len(allowed) > 0 && !namesOnly(p, names) {
+			findings = append(findings, finding(fmt.Sprintf("the deadcode filter pattern %q is not just names from the deadcode-filter allow list joined by |; anything else can hide a function the exception does not record", p), "write the pattern as the allowed function names alone, such as 'hookA|hookB', and list each in the exception's allow, with a reason"))
 		}
 	}
 	for _, n := range names {
@@ -231,12 +281,26 @@ func deadcodeFilterFindings(text string, vals values.Values) []Finding {
 	return findings
 }
 
+// namesOnly says whether pattern p is made of allowed names and alternation
+// punctuation alone: an unlisted name or a wildcard would hide more.
+func namesOnly(p string, names []string) bool {
+	byLength := slices.Clone(names)
+	slices.SortFunc(byLength, func(a, b string) int { return len(b) - len(a) })
+	found := false
+	for _, n := range byLength {
+		if strings.Contains(p, n) {
+			found = true
+			p = strings.ReplaceAll(p, n, "")
+		}
+	}
+	return found && strings.Trim(p, `|\^$() `) == ""
+}
+
 // deadcodeFilters reads the pipeline stages that follow the deadcode run in
 // the recipe text. A grep stage yields its pattern arguments; any other
 // filtering tool is returned by name. A quiet grep (-q) only tests, and is
 // not a filter.
-func deadcodeFilters(text string) (patterns, other []string) {
-	blank := maskQuotes(text)
+func deadcodeFilters(text, blank string) (patterns, other []string) {
 	start := deadcodeRun.FindStringIndex(blank)[0]
 	for _, m := range outputFilter.FindAllStringSubmatchIndex(blank[start:], -1) {
 		tool := blank[start+m[2] : start+m[3]]
@@ -309,15 +373,16 @@ func isMainFile(path, name string) bool {
 	return err == nil && packageMain.Match(src) && !buildIgnore.Match(src)
 }
 
-// maskQuotes blanks each quoted string to spaces of the same length, so an
-// offset into the result is an offset into s.
+// maskQuotes blanks each quoted string to spaces of the same byte length, so
+// an offset into the result is an offset into s.
 func maskQuotes(s string) string {
 	return quoted.ReplaceAllStringFunc(s, func(q string) string {
-		return strings.Map(func(r rune) rune {
-			if r == '\n' {
-				return r
+		b := []byte(q)
+		for i, c := range b {
+			if c != '\n' {
+				b[i] = ' '
 			}
-			return ' '
-		}, q)
+		}
+		return string(b)
 	})
 }
