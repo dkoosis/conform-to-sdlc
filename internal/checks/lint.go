@@ -62,7 +62,7 @@ func checkLintFloor(dir string) []Finding {
 			File:   file,
 			Rule:   RuleLintFloor,
 			Msg:    fmt.Sprintf("unparseable YAML: %v", err),
-			Repair: "fix the YAML; conform-to-sdlc compares parsed sets, not bytes",
+			Repair: "fix the YAML; repo-standard compares parsed sets, not bytes",
 		}}
 	}
 

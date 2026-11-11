@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // TestReadme_LeadingHTMLCommentStillPasses: a comment renders as nothing, so
@@ -35,7 +35,7 @@ func TestReadme_CommentThenProseIsStillAFinding(t *testing.T) {
 }
 
 // TestFix_NamesTheRepoFromGoModNotTheDirectory: --fix run inside a worktree
-// titled the wrong page "# conform-rename" after the worktree's directory.
+// titled the wrong page "# repo-standard-rename" after the worktree's directory.
 func TestFix_NamesTheRepoFromGoModNotTheDirectory(t *testing.T) {
 	t.Parallel()
 	files := goodRepo()

@@ -10,7 +10,7 @@ func TestVersionDefault(t *testing.T) {
 	}
 }
 
-// TestParseModeVersion: `conform-to-sdlc version` is handled (no further check runs)
+// TestParseModeVersion: `repo-standard version` is handled (no further check runs)
 // and reports no error.
 func TestParseModeVersion(t *testing.T) {
 	mode, handled, err := parseMode([]string{"version"})

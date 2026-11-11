@@ -33,7 +33,7 @@ func checkCIAuditSchedule(dir string) []Finding {
 		File:   filepath.ToSlash(filepath.Join(".github", "workflows")),
 		Rule:   RuleCIAuditSchedule,
 		Msg:    "no workflow runs `make audit` on a schedule — race, fuzz, dupe, nilcheck, deadcode and vuln run only when someone remembers to",
-		Repair: "add " + auditWorkflowFile + " with `on: schedule: - cron: '41 7 * * *'` and a step running `make audit` (conform-to-sdlc --fix writes one when the repo has none)",
+		Repair: "add " + auditWorkflowFile + " with `on: schedule: - cron: '41 7 * * *'` and a step running `make audit` (repo-standard --fix writes one when the repo has none)",
 	}}
 }
 
@@ -130,7 +130,7 @@ func renderAuditWorkflow(ScaffoldSpec) string {
 const auditWorkflowTmpl = `name: audit
 
 # The slow gates (race, fuzz, dupe, nilcheck, deadcode, vuln), nightly and on
-# demand. conform-to-sdlc's ci-audit-schedule rule needs a cron here and a
+# demand. repo-standard's ci-audit-schedule rule needs a cron here and a
 # step that runs make audit.
 on:
   schedule:

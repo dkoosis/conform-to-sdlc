@@ -1,4 +1,4 @@
-module github.com/dkoosis/conform-to-sdlc
+module github.com/dkoosis/repo-standard
 
 go 1.26.3
 

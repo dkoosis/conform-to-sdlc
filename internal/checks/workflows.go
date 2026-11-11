@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// workflow is the subset of a GitHub Actions file conform-to-sdlc reads. yaml.v3
+// workflow is the subset of a GitHub Actions file repo-standard reads. yaml.v3
 // resolves a plain `on` key as the string "on" (YAML 1.2), so no key
 // gymnastics are needed.
 type workflow struct {
@@ -73,7 +73,7 @@ func checkCIDocsSkip(dir string) []Finding {
 			File:   file,
 			Rule:   RuleCIDocsSkip,
 			Msg:    fmt.Sprintf("on.%s carries a workflow-level path filter — a skipped workflow never reports the required check context, so a docs-only PR cannot merge", event),
-			Repair: "delete the paths/paths-ignore key; decide docs-only in a detect job instead (see `conform-to-sdlc --fix` on a repo with no check.yml for the shape)",
+			Repair: "delete the paths/paths-ignore key; decide docs-only in a detect job instead (see `repo-standard --fix` on a repo with no check.yml for the shape)",
 		})
 	}
 
@@ -96,7 +96,7 @@ func docsSkipFindings(wf *workflow, file string) []Finding {
 				File:   file,
 				Rule:   RuleCIDocsSkip,
 				Msg:    fmt.Sprintf("job %q's make check step is not gated on a needs output (missing needs:, or an if that never names it) — no job decides docs-only before make check runs — a docs-only PR pays the full gate", job),
-				Repair: "mv " + file + " check.yml.old && conform-to-sdlc --fix, then port the old file's extra steps behind the detect guard",
+				Repair: "mv " + file + " check.yml.old && repo-standard --fix, then port the old file's extra steps behind the detect guard",
 			})
 		}
 		return findings
@@ -117,7 +117,7 @@ func docsSkipFindings(wf *workflow, file string) []Finding {
 				File:   file,
 				Rule:   RuleCIDocsSkip,
 				Msg:    fmt.Sprintf("job %q's make check step waits on %q, but %q carries no docs-only regex — no job decides docs-only before make check runs — a docs-only PR pays the full gate", g.gateJob, g.detectJob, g.detectJob),
-				Repair: "mv " + file + " check.yml.old && conform-to-sdlc --fix, then port the old file's extra steps behind the detect guard",
+				Repair: "mv " + file + " check.yml.old && repo-standard --fix, then port the old file's extra steps behind the detect guard",
 			})
 			continue
 		}
@@ -126,8 +126,8 @@ func docsSkipFindings(wf *workflow, file string) []Finding {
 				findings = append(findings, Finding{
 					File:   file,
 					Rule:   RuleCIDocsSkip,
-					Msg:    fmt.Sprintf("detect job %q widens the docs-only set with %q — a repo may narrow conform-to-sdlc's set, never widen it", g.detectJob, alt),
-					Repair: fmt.Sprintf("remove %q from the job's awk regex; conform-to-sdlc's set is %s", alt, renderDocsOnlyRegex()),
+					Msg:    fmt.Sprintf("detect job %q widens the docs-only set with %q — a repo may narrow repo-standard's set, never widen it", g.detectJob, alt),
+					Repair: fmt.Sprintf("remove %q from the job's awk regex; repo-standard's set is %s", alt, renderDocsOnlyRegex()),
 				})
 			}
 		}

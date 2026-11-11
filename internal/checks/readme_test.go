@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // TestReadme_ConformingRepoPasses: the reference repo carries a README.md
@@ -31,12 +31,12 @@ func TestReadme_BrokenShapesAreFindings(t *testing.T) {
 		"absent":           {present: false},
 		"empty":            {body: "", present: true},
 		"whitespace only":  {body: "\n\n   \n", present: true},
-		"no heading":       {body: "conform-to-sdlc checks repos.\n", present: true},
-		"heading too deep": {body: "## conform-to-sdlc\n\nprose.\n", present: true},
-		"bare hash":        {body: "#conform-to-sdlc\n\nprose.\n", present: true},
+		"no heading":       {body: "repo-standard checks repos.\n", present: true},
+		"heading too deep": {body: "## repo-standard\n\nprose.\n", present: true},
+		"bare hash":        {body: "#repo-standard\n\nprose.\n", present: true},
 		"empty heading":    {body: "# \n\nprose.\n", present: true},
 		"heading not first": {
-			body:    "a stray line.\n\n# conform-to-sdlc\n\nprose.\n",
+			body:    "a stray line.\n\n# repo-standard\n\nprose.\n",
 			present: true,
 		},
 	}
@@ -66,7 +66,7 @@ func TestReadme_BrokenShapesAreFindings(t *testing.T) {
 func TestReadme_LeadingBlankLinesStillPass(t *testing.T) {
 	t.Parallel()
 	files := goodRepo()
-	files[checks.ReadmeFile] = "\n\n# conform-to-sdlc\n\nprose.\n"
+	files[checks.ReadmeFile] = "\n\n# repo-standard\n\nprose.\n"
 	dir := writeRepo(t, files)
 	if got := checks.CheckReadme(dir); len(got) != 0 {
 		t.Fatalf("leading blank lines: want no findings, got %+v", got)
@@ -85,7 +85,7 @@ func TestRun_MissingReadmeFailsTheGate(t *testing.T) {
 	}
 }
 
-// TestScaffold_EmitsAPassingReadme: `conform-to-sdlc init` promises a repo that passes
+// TestScaffold_EmitsAPassingReadme: `repo-standard init` promises a repo that passes
 // unedited, so the README it writes must satisfy the rule it just added.
 func TestScaffold_EmitsAPassingReadme(t *testing.T) {
 	t.Parallel()

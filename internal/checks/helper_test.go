@@ -6,15 +6,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
-	"github.com/dkoosis/conform-to-sdlc/internal/lintpack"
+	"github.com/dkoosis/repo-standard/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/lintpack"
 )
 
 // goodMakefile satisfies the four-verb contract for the tool profile.
 const goodMakefile = `.DEFAULT_GOAL := check
 GOLANGCILINT := bash scripts/lint-locked
 
-check: vet lint test build selfcheck ## Fast validation: vet + lint + test + build, then conform-to-sdlc
+check: vet lint test build standard ## Fast validation: vet + lint + test + build, then repo-standard
 audit: check race fuzz dupe nilcheck deadcode vuln ## Exhaustive validation
 deploy: build ## Install locally
 help: ## Show this help
@@ -28,7 +28,7 @@ fuzz: ## Fuzz
 dupe: ## Duplication
 nilcheck: ## nilaway
 deadcode: ## Unreachable functions
-selfcheck: ## Run conform-to-sdlc
+standard: ## Run repo-standard
 clean: ## Remove build outputs
 install: ## Install into GOBIN
 cross: ## Cross-compile linux-amd64 and linux-arm64
@@ -121,7 +121,7 @@ sync:
 // on PATH via fakeBD).
 func goodRepo() map[string]string {
 	files := map[string]string{
-		"docs/conform.json":                  goodValues,
+		"docs/repo-standard.json":            goodValues,
 		".beads/config.yaml":                 goodBDConfig,
 		"Makefile":                           goodMakefile,
 		".golangci.yml":                      checks.CanonicalGolangci,

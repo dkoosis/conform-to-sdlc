@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // ownAgents is a repo's own instructions, in the shape sdlc keeps its own:
@@ -65,7 +65,7 @@ func TestAgentsBlock_ManagedBlockIsAFinding(t *testing.T) {
 
 // TestRun_LardedAgentsFailsTheGate: the rule is wired into Run, not just
 // reachable from a test hook. Without this the check could pass its own unit
-// cases while conform-to-sdlc stayed green on a larded repo.
+// cases while repo-standard stayed green on a larded repo.
 func TestRun_LardedAgentsFailsTheGate(t *testing.T) {
 	t.Parallel()
 	files := goodRepo()

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/checks"
 )
 
 // ghStub answers gh API paths from a canned map; absent path = 404.
@@ -35,7 +35,7 @@ func conformingRepoResponses(full string) map[string]string {
 // allFleetResponses maps every roster repo to the same canned answers.
 func allFleetResponses(shape func(full string) map[string]string) map[string]string {
 	responses := map[string]string{}
-	for _, name := range []string{"ferret", "snipe", "canapay", "fo", "loto", "strand", "npharvester", "atomicfile", "keyring", "next", "conform-to-sdlc"} {
+	for _, name := range []string{"ferret", "snipe", "canapay", "fo", "loto", "strand", "npharvester", "atomicfile", "keyring", "next", "repo-standard"} {
 		maps.Copy(responses, shape("dkoosis/"+name))
 	}
 	return responses
@@ -120,9 +120,30 @@ func TestRunFleet_ProtectionShape(t *testing.T) {
 	}
 }
 
-// TestRunFleet_ExceptionFromRepoValues: a repo's own conform.json exceptions
+// TestRunFleet_ExceptionFromRepoValues: a repo's own repo-standard.json exceptions
 // apply to its fleet findings.
 func TestRunFleet_ExceptionFromRepoValues(t *testing.T) {
+	responses := allFleetResponses(conformingRepoResponses)
+	responses["repos/dkoosis/keyring"] = `{"default_branch":"main","allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":false}`
+	valuesJSON := `{"profile": "lib", "exceptions": [{"rule": "merge-policy", "reason": "finished micro-lib; branch cleanup is manual by choice"}]}`
+	responses["repos/dkoosis/keyring/contents/docs/repo-standard.json"] = fmt.Sprintf(`{"content":%q}`, base64.StdEncoding.EncodeToString([]byte(valuesJSON)))
+	restore := checks.SetGHAPI(ghStub(responses))
+	defer restore()
+
+	findings, err := checks.RunFleet(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range findings {
+		if f.File == "dkoosis/keyring" && f.Rule == checks.RuleMergePolicy {
+			t.Errorf("excepted merge-policy still reported: %v", f)
+		}
+	}
+}
+
+// TestRunFleet_ExceptionFromOldNameFile: a repo not yet migrated still holds
+// docs/conform.json; its exceptions apply to its fleet findings until it moves.
+func TestRunFleet_ExceptionFromOldNameFile(t *testing.T) {
 	responses := allFleetResponses(conformingRepoResponses)
 	responses["repos/dkoosis/keyring"] = `{"default_branch":"main","allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":false}`
 	valuesJSON := `{"profile": "lib", "exceptions": [{"rule": "merge-policy", "reason": "finished micro-lib; branch cleanup is manual by choice"}]}`

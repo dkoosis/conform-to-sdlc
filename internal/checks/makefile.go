@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/values"
+	"github.com/dkoosis/repo-standard/internal/values"
 )
 
 // The four-verb contract: check · audit · deploy · help, identical in every
@@ -24,7 +24,7 @@ var (
 	// targetFloor is every target a Go repo carries, whatever `check`
 	// composes — the Makefile floor ratified on sd-dtxs.1 (2026-09-07). The
 	// contract verbs check · audit · help · deploy are enforced separately.
-	targetFloor = []string{"build", "test", "lint", "vet", "vuln", "selfcheck", "race", "clean"}
+	targetFloor = []string{"build", "test", "lint", "vet", "vuln", "standard", "race", "clean"}
 
 	// auditGates is what `audit` must reach, through its prerequisites at any
 	// depth (cfm-tvk, nug 284ca53cd396): the most rigorous static analysis
@@ -128,7 +128,7 @@ func checkMakefile(dir string, profile values.Profile) []Finding {
 			File:   makefileFile,
 			Rule:   RuleMakefileVerb,
 			Msg:    "no top-level Makefile — the four-verb contract (check · audit · deploy · help) has no home",
-			Repair: "copy sdlc's Makefile (the reference) and adapt targets; a new repo gets one from `conform-to-sdlc init`",
+			Repair: "copy sdlc's Makefile (the reference) and adapt targets; a new repo gets one from `repo-standard init`",
 		}}
 	}
 
@@ -156,7 +156,7 @@ func floorTargets(profile values.Profile) []string {
 }
 
 // floorFindings enforces the target floor (makefile-verbs): every floor
-// target exists, and `check` runs selfcheck last so conform-to-sdlc grades the tree
+// target exists, and `check` runs standard last so repo-standard grades the tree
 // the rest of the gate just passed.
 func floorFindings(byName map[string]mkTarget, profile values.Profile, crossIncluded bool) []Finding {
 	var missing []string
@@ -168,20 +168,24 @@ func floorFindings(byName map[string]mkTarget, profile values.Profile, crossIncl
 	}
 	var findings []Finding
 	if len(missing) > 0 {
+		repair := "add a documented target for each (cross may come from `include .sandbox/lib/Makefile.cross.mk`)"
+		if _, old := byName["selfcheck"]; old && slices.Contains(missing, "standard") {
+			repair = "rename the selfcheck target to standard (the tool was renamed repo-standard), and its use in check; " + repair
+		}
 		findings = append(findings, Finding{
 			File:   makefileFile,
 			Rule:   RuleMakefileVerb,
 			Msg:    "floor targets missing: " + strings.Join(missing, ", ") + " — every Go repo answers the same targets (sd-dtxs.1 floor)",
-			Repair: "add a documented target for each (cross may come from `include .sandbox/lib/Makefile.cross.mk`)",
+			Repair: repair,
 		})
 	}
 	if check, ok := byName["check"]; ok {
-		if n := len(check.prereqs); n == 0 || check.prereqs[n-1] != "selfcheck" {
+		if n := len(check.prereqs); n == 0 || check.prereqs[n-1] != "standard" {
 			findings = append(findings, Finding{
 				File:   makefileFile,
 				Rule:   RuleMakefileVerb,
-				Msg:    "check does not run selfcheck last — conform-to-sdlc must grade the tree the rest of the gate passed",
-				Repair: "make selfcheck the last prerequisite of check",
+				Msg:    "check does not run standard last — repo-standard must grade the tree the rest of the gate passed",
+				Repair: "make standard the last prerequisite of check",
 			})
 		}
 	}
@@ -208,7 +212,7 @@ func verbFindings(byName map[string]mkTarget, profile values.Profile) []Finding 
 	if _, ok := byName["deploy"]; ok && profile == values.ProfileLib {
 		add(
 			"lib profile carries a deploy verb — libs are the contract minus deploy",
-			"delete the deploy target (or set profile to tool in conform.json)",
+			"delete the deploy target (or set profile to tool in repo-standard.json)",
 		)
 	}
 

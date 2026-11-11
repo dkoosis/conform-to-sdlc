@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/sandbox"
+	"github.com/dkoosis/repo-standard/internal/sandbox"
 )
 
 // runDoctor writes the canonical library to a temp SANDBOX_DIR, installs the

@@ -105,7 +105,7 @@ linters:
       # This module's own packages already wrap with context at the boundary
       # where the error starts; cmd/ re-wrapping them adds only noise.
       ignore-package-globs:
-        - github.com/dkoosis/conform-to-sdlc/*
+        - github.com/dkoosis/repo-standard/*
     errcheck:
       exclude-functions:
         - (io.Closer).Close
@@ -127,8 +127,8 @@ linters:
       # bugclasses pack (ccp-sbp, decision nug d7ea466a8172): the ruleguard
       # checker runs the shared machine rules for the recurring cross-repo Go
       # defect classes. Rules live in .golangci-rules/bugclasses.go — a verbatim
-      # copy of the lintbrush pack, which selfcheck's lint-pack rule compares
-      # with the copy conform-to-sdlc embeds.
+      # copy of the lintbrush pack, which standard's lint-pack rule compares
+      # with the copy repo-standard embeds.
       enabled-checks:
         - ruleguard
       settings:

@@ -1,4 +1,4 @@
-# conform-to-sdlc
+# repo-standard
 
 `README.md` says what this is: the surfaces, the principles and the non-goals. A rule here must not ask a repo for what sdlc's `SPEC.md` has no place for.
 

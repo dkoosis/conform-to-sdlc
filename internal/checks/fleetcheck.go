@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/values"
+	"github.com/dkoosis/repo-standard/internal/values"
 )
 
 // Surface 3 (--fleet): GitHub-side settings, swept over every repo in the
@@ -68,7 +68,7 @@ var (
 )
 
 // RunFleet sweeps every roster repo concurrently and returns the combined
-// findings, each repo's own conform.json exceptions applied.
+// findings, each repo's own repo-standard.json exceptions applied.
 func RunFleet(ctx context.Context) ([]Finding, error) {
 	if _, err := exec.LookPath("gh"); err != nil {
 		return nil, errGHUnavailable
@@ -237,8 +237,8 @@ func mergePolicyFindings(full string, s *repoSettings) []Finding {
 		Repair: repair}}
 }
 
-// fleetValues fetches a repo's docs/conform.json so its declared exceptions apply
-// to fleet findings too, falling back to the root copy (LegacyValuesFile) while
+// fleetValues fetches a repo's docs/repo-standard.json so its declared exceptions apply
+// to fleet findings too, falling back to the old-name files (LegacyValuesFiles) while
 // the fleet migrates. Missing or invalid → no exceptions (Surface 1 of
 // that repo owns the values-file finding).
 //
@@ -249,8 +249,8 @@ func mergePolicyFindings(full string, s *repoSettings) []Finding {
 func fleetValues(ctx context.Context, full string) values.Values {
 	none := values.Values{Profile: values.ProfileTool}
 	data, err := ghAPI(ctx, "repos/"+full+"/contents/"+ValuesFile)
-	if err != nil {
-		data, err = ghAPI(ctx, "repos/"+full+"/contents/"+LegacyValuesFile)
+	for i := 0; err != nil && i < len(LegacyValuesFiles); i++ {
+		data, err = ghAPI(ctx, "repos/"+full+"/contents/"+LegacyValuesFiles[i])
 	}
 	if err != nil {
 		return none

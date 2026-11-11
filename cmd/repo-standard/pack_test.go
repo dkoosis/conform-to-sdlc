@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/lintpack"
+	"github.com/dkoosis/repo-standard/internal/lintpack"
 )
 
 // TestPackSyncWritesTheRequiredPack: the repair lint-pack names exists and

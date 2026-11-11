@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dkoosis/conform-to-sdlc/internal/checks"
-	"github.com/dkoosis/conform-to-sdlc/internal/lintpack"
+	"github.com/dkoosis/repo-standard/internal/checks"
+	"github.com/dkoosis/repo-standard/internal/lintpack"
 )
 
 func packBytes(t *testing.T, source string) string {
@@ -105,8 +105,8 @@ func TestLintPack(t *testing.T) {
 			if f.Rule != checks.RuleLintPack || f.File != tt.wantFile || !strings.Contains(f.Msg, tt.wantMsg) {
 				t.Errorf("got %s %s %q, want lint-pack %s containing %q", f.Rule, f.File, f.Msg, tt.wantFile, tt.wantMsg)
 			}
-			if !strings.Contains(f.Repair, "conform-to-sdlc") {
-				t.Errorf("repair %q names no conform-to-sdlc command", f.Repair)
+			if !strings.Contains(f.Repair, "repo-standard") {
+				t.Errorf("repair %q names no repo-standard command", f.Repair)
 			}
 		})
 	}
@@ -120,7 +120,7 @@ func TestLintPack_RepairCommandForDrift(t *testing.T) {
 	files := goodRepo()
 	files[lintpack.Dir+"/bugclasses.go"] = oneByteOff(files[lintpack.Dir+"/bugclasses.go"])
 	findings := checks.CheckLintPack(writeRepo(t, files))
-	if len(findings) != 1 || !strings.Contains(findings[0].Repair, "go tool conform-to-sdlc pack sync") {
+	if len(findings) != 1 || !strings.Contains(findings[0].Repair, "go tool repo-standard pack sync") {
 		t.Fatalf("want one finding repaired by pack sync, got %v", findings)
 	}
 }

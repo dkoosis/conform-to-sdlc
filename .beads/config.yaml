@@ -65,9 +65,9 @@
 # - linear.api_key  → use LINEAR_API_KEY env var instead
 # - github.token    → use GITHUB_TOKEN env var instead
 
-# Fleet contract (conform bd-config rule): the three keys below are the
-# TRACKED declaration Surface 1 checks; `conform --local` verifies bd's live
+# Fleet contract (repo-standard bd-config rule): the three keys below are the
+# TRACKED declaration Surface 1 checks; `repo-standard --local` verifies bd's live
 # config matches. Keep both in sync when either changes.
 issue-prefix: "cfm"
 custom.plan_dir: /Users/vcto/Projects/dk/Project/conform/plans
-sync.remote: "git+https://github.com/dkoosis/conform-to-sdlc.git"
+sync.remote: "git+https://github.com/dkoosis/repo-standard.git"
