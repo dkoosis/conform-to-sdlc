@@ -106,6 +106,10 @@ func checkFuzzCoverage(dir string) []Finding {
 		return nil
 	}
 	runs := fuzzRuns(cmds)
+	runs.byDir = map[string][]string{}
+	for _, f := range funcs {
+		runs.byDir[path.Dir(f.file)] = append(runs.byDir[path.Dir(f.file)], f.name)
+	}
 
 	var why string
 	switch {
@@ -192,12 +196,14 @@ type fuzzPkg struct {
 
 type fuzzRunSet struct {
 	entries []fuzzEntry
-	scope   []fuzzPkg // packages the -list and go list commands cover
-	listed  bool      // a go test -list command discovers the names
+	scope   []fuzzPkg           // packages the -list and go list commands cover
+	listed  bool                // a go test -list command discovers the names
+	exclude []*regexp.Regexp    // grep -v patterns a go list is piped through
+	byDir   map[string][]string // Fuzz function names per directory
 }
 
 var (
-	goTestCmd = regexp.MustCompile(`\bgo\s+test\b`)
+	goTestCmd = regexp.MustCompile(`(?:\bgo|\$\(GO\))\s+test\b`)
 	goListCmd = regexp.MustCompile(`\bgo\s+list\b`)
 	stmtSplit = regexp.MustCompile(`;|&&|\|\||\n`)
 	// continuation joins a backslash-continued command into one line.
@@ -211,27 +217,59 @@ var (
 func fuzzRuns(cmds []string) fuzzRunSet {
 	var set fuzzRunSet
 	for _, c := range cmds {
-		c = continuation.ReplaceAllString(c, " ")
 		cwd := "."
-		for _, piece := range stmtSplit.Split(c, -1) {
-			fields := strings.Fields(piece)
-			if len(fields) > 1 && strings.TrimLeft(fields[0], "@-+") == "cd" {
-				cwd = path.Join(cwd, strings.Trim(fields[1], `"'`))
-				continue
-			}
-			isTest := goTestCmd.MatchString(piece)
-			switch {
-			case isTest && strings.Contains(piece, "-fuzz"):
-				set.entries = append(set.entries, fuzzEntry{names: fuzzNames(piece), pkgs: pkgArgs(piece, cwd)})
-			case isTest && strings.Contains(piece, "-list"):
-				set.listed = true
-				set.scope = append(set.scope, literalPkgs(pkgArgs(piece, cwd))...)
-			case goListCmd.MatchString(piece):
-				set.scope = append(set.scope, literalPkgs(pkgArgs(piece, cwd))...)
-			}
+		for _, piece := range stmtSplit.Split(continuation.ReplaceAllString(c, " "), -1) {
+			cwd = set.add(piece, cwd)
 		}
 	}
 	return set
+}
+
+// add reads one shell statement and returns the directory later statements
+// of the same command run in (a cd changes it).
+func (s *fuzzRunSet) add(piece, cwd string) string {
+	fields := strings.Fields(piece)
+	for len(fields) > 0 && slices.Contains([]string{"do", "then", "else"}, strings.TrimLeft(fields[0], "@-+(")) {
+		fields = fields[1:]
+	}
+	if len(fields) == 0 {
+		return cwd
+	}
+	switch strings.TrimLeft(fields[0], "@-+(") {
+	case "echo", "printf":
+		return cwd // text about fuzzing runs nothing
+	case "cd":
+		if len(fields) > 1 {
+			return path.Join(cwd, strings.Trim(fields[1], `"'`))
+		}
+	}
+	isTest := goTestCmd.MatchString(piece)
+	if isTest && strings.Contains(piece, "-list") {
+		s.listed = true
+	}
+	switch {
+	case isTest && strings.Contains(piece, "-fuzz"):
+		s.entries = append(s.entries, fuzzEntry{names: fuzzNames(piece), pkgs: pkgArgs(piece, cwd)})
+	case isTest && strings.Contains(piece, "-list"):
+		s.scope = append(s.scope, literalPkgs(pkgArgs(piece, cwd))...)
+	case goListCmd.MatchString(piece):
+		s.scope = append(s.scope, literalPkgs(pkgArgs(piece, cwd))...)
+		s.exclude = append(s.exclude, grepExcludes(piece)...)
+	}
+	return cwd
+}
+
+var grepV = regexp.MustCompile(`\|\s*grep\s+(?:-\w*v\w*|-v)\s+(?:'([^']*)'|"([^"]*)"|([^\s)|]+))`)
+
+// grepExcludes returns the `| grep -v <pattern>` filters on a go list.
+func grepExcludes(piece string) []*regexp.Regexp {
+	var out []*regexp.Regexp
+	for _, m := range grepV.FindAllStringSubmatch(piece, -1) {
+		if re, err := regexp.Compile(m[1] + m[2] + m[3]); err == nil {
+			out = append(out, re)
+		}
+	}
+	return out
 }
 
 // fuzzNames returns the regexp a -fuzz value gives, or nil when the value
@@ -242,7 +280,7 @@ func fuzzNames(piece string) *regexp.Regexp {
 		return nil
 	}
 	val := strings.ReplaceAll(m[1]+m[2]+m[3], "$$", "$")
-	if strings.Contains(strings.TrimSuffix(val, "$"), "$") {
+	if strings.Contains(strings.TrimSuffix(val, "$"), "$") || strings.Contains(val, "{}") {
 		return nil
 	}
 	re, err := regexp.Compile(val)
@@ -295,26 +333,59 @@ func literalPkgs(pkgs []fuzzPkg) []fuzzPkg {
 // cover says whether some go test -fuzz command runs the function: its name
 // matches and its packages (for a variable, the discovered ones) include the
 // function's directory.
-func (s fuzzRunSet) cover(f fuzzFunc) bool {
+func (s *fuzzRunSet) cover(f fuzzFunc) bool {
 	fdir := path.Dir(f.file)
 	for _, e := range s.entries {
-		nameOK := e.names == nil && s.listed || e.names != nil && e.names.MatchString(f.name)
-		if nameOK && s.entryRunsDir(e, fdir) {
+		if s.entryRunsFunc(e, f.name, fdir) && s.entryRunsDir(e, fdir) {
 			return true
 		}
 	}
 	return false
 }
 
+// entryRunsFunc says whether the command's -fuzz value runs the function.
+// go test -fuzz runs one function per package: a regexp that matches two in
+// the package fuzzes none ("will not fuzz, -fuzz matches more than one").
+func (s *fuzzRunSet) entryRunsFunc(e fuzzEntry, name, dir string) bool {
+	if e.names == nil {
+		return s.listed
+	}
+	if !e.names.MatchString(name) {
+		return false
+	}
+	matches := 0
+	for _, other := range s.byDir[dir] {
+		if e.names.MatchString(other) {
+			matches++
+		}
+	}
+	return matches == 1
+}
+
 // entryRunsDir says whether the command's packages include dir; a variable
-// package ranges over the discovery commands' scope, or everything with none.
-func (s fuzzRunSet) entryRunsDir(e fuzzEntry, dir string) bool {
+// package ranges over the discovery commands' scope (less its grep -v
+// filters), or everything with none.
+func (s *fuzzRunSet) entryRunsDir(e fuzzEntry, dir string) bool {
 	for _, p := range e.pkgs {
 		pkgs := []fuzzPkg{p}
 		if p.any && len(s.scope) > 0 {
+			if s.excluded(dir) {
+				continue
+			}
 			pkgs = s.scope
 		}
 		if pkgsInclude(pkgs, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+// excluded says whether a go list filter drops the package: the patterns
+// match go list's import paths, so test them against "mod/" + dir + "/".
+func (s *fuzzRunSet) excluded(dir string) bool {
+	for _, re := range s.exclude {
+		if re.MatchString("mod/" + dir + "/") {
 			return true
 		}
 	}

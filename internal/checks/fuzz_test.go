@@ -57,7 +57,7 @@ func TestFuzzCoverage_Passes(t *testing.T) {
 	t.Parallel()
 	loop := "\t@for pkg in $$(go list ./...); do for f in $$(go test -list '^Fuzz' $$pkg | sed -n '/^Fuzz/p'); do go test -run '^$$' -fuzz \"^$$f$$\" -fuzztime=$(FUZZTIME) $$pkg || exit 1; done; done\n"
 	named := "\tgo test -run '^$$' -fuzz=^FuzzA$$ ./pkg\n\tgo test -run '^$$' -fuzz '^FuzzB$$' ./pkg\n"
-	pattern := "\tgo test -run '^$$' -fuzz '^Fuzz[AB]$$' ./pkg\n"
+	pattern := "\tgo test -run '^$$' -fuzz '^Fuzz[A]$$' ./pkg\n\tgo test -run '^$$' -fuzz '^FuzzB$$' ./pkg\n"
 	for name, recipe := range map[string]string{"list loop": loop, "each named": named, "regexp": pattern} {
 		if got := fuzzRepo(t, recipe, map[string]string{"pkg/a_test.go": twoFuzz}); len(got) != 0 {
 			t.Errorf("%s: produced %v", name, got)
@@ -166,5 +166,48 @@ func TestFuzzCoverage_Shapes(t *testing.T) {
 	got = fuzzRepo(t, lit, map[string]string{"pkg/a_test.go": twoFuzz})
 	if len(got) != 2 {
 		t.Errorf("literal loop with no list: want both unrun, got %v", got)
+	}
+}
+
+func TestFuzzCoverage_ReviewShapes(t *testing.T) {
+	t.Parallel()
+	// go test -fuzz runs one function: a regexp matching two runs neither.
+	got := fuzzRepo(t, "\tgo test -run '^$$' -fuzz '^Fuzz[AB]$$' ./pkg\n", map[string]string{"pkg/a_test.go": twoFuzz})
+	if len(got) != 2 {
+		t.Errorf("ambiguous -fuzz regexp: want both unrun, got %v", got)
+	}
+
+	// A go list piped through grep -v drops the package from the loop.
+	pkg := "package a\nimport \"testing\"\nfunc FuzzParse(f *testing.F) {}\n"
+	tests := map[string]string{"a/a_test.go": pkg, "cmd/x/x_test.go": pkg}
+	loop := "\t@for pkg in $$(go list ./... | grep -v /cmd/); do for f in $$(go test -list '^Fuzz' $$pkg | sed -n '/^Fuzz/p'); do go test -run '^$$' -fuzz \"^$$f$$\" $$pkg || exit 1; done; done\n"
+	if got := fuzzRepo(t, loop, tests); len(got) != 1 || !strings.Contains(got[0].Msg, "cmd/x/x_test.go") {
+		t.Errorf("filtered loop: want only cmd/x unrun, got %v", got)
+	}
+
+	// A subshell cd is followed.
+	sub := "\t(cd a && go test -run '^$$' -fuzz '^FuzzParse$$' .)\n"
+	if got := fuzzRepo(t, sub, map[string]string{"a/a_test.go": pkg}); len(got) != 0 {
+		t.Errorf("subshell cd produced %v", got)
+	}
+}
+
+func TestFuzzCoverage_MoreShapes(t *testing.T) {
+	t.Parallel()
+	one := map[string]string{"a/a_test.go": "package a\nimport \"testing\"\nfunc FuzzParse(f *testing.F) {}\n"}
+	// Text about fuzzing, in an echo, runs nothing.
+	got := fuzzRepo(t, "\t@echo 'to fuzz: go test -fuzz=^FuzzParse$$ ./a'\n", one)
+	if len(got) != 1 {
+		t.Errorf("echoed fuzz command: want one unrun, got %v", got)
+	}
+	// A cd after do, a $(GO) command and an xargs list form are read.
+	for name, recipe := range map[string]string{
+		"do cd": "\t@for x in 1; do cd a && go test -run '^$$' -fuzz '^FuzzParse$$' .; done\n",
+		"$(GO)": "\t$(GO) test -run '^$$' -fuzz '^FuzzParse$$' ./a\n",
+		"xargs": "\t@go test -list '^Fuzz' ./a | grep '^Fuzz' | xargs -I{} go test -run '^$$' -fuzz '^{}$$' ./a\n",
+	} {
+		if got := fuzzRepo(t, recipe, one); len(got) != 0 {
+			t.Errorf("%s: produced %v", name, got)
+		}
 	}
 }
