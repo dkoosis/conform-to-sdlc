@@ -1,6 +1,6 @@
 # The lintbrush rules pack repo-standard embeds. Written by make pack-refresh; do not edit.
-commit 2883a9329d331a28886b6eb9f65dcc3f866085c0
-0cd8625e92be897b1dc24dc1087ff79ff19cab44 rules.go
+commit f6356b1d7583bc1973323e018c4d2bbbb6086a14
+7602b4c1e833fa678d236b7bb395f90b38a4934d rules.go
 79ebfe6dcb8fba2e99067e24560d7f200c4c6a47 modern.go
 8dfe79246b168e869bf1914855a2212328d4e5af optin_rawstatewrite.go
 178913d794e49d0ea29439e4d1cf96a10a31362d golangci.snippet.yml

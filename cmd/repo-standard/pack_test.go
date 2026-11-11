@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -46,7 +47,7 @@ func TestFixThatCannotWriteStillReports(t *testing.T) {
 	if err := run([]string{"--fix"}); !errors.Is(err, errFindings) {
 		t.Fatalf("--fix in an unwritable repo: got %v, want the findings exit", err)
 	}
-	if _, err := os.Lstat(filepath.Join(dir, lintpack.Dir)); !os.IsNotExist(err) {
+	if _, err := os.Lstat(filepath.Join(dir, lintpack.Dir)); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("--fix left %s behind in an unwritable repo (err %v)", lintpack.Dir, err)
 	}
 }
