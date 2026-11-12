@@ -81,9 +81,17 @@ func checkField(pass *analysis.Pass, field *ast.Field) {
 	}
 }
 
+// ignoreMarker is the comment form golangci-lint does not read. Its nolint
+// filter warns about an unknown linter name in a nolint directive and no
+// setting turns that off, so a repo that wants a clean
+// lint run writes `//omitemptyscalar:ignore <reason>` instead. The reason is
+// required here: the marker without one silences nothing.
+const ignoreMarker = "omitemptyscalar:ignore"
+
 // silenced reports whether the field's doc or trailing comment carries
-// `//nolint:omitemptyscalar` (a reason after `//` is expected by convention).
-// A deliberate absent-equals-false wire encoding is silenced this way.
+// `//omitemptyscalar:ignore <reason>`, or the older `//nolint:omitemptyscalar`
+// (a reason after `//` is expected by convention). A deliberate
+// absent-equals-false wire encoding is silenced this way.
 func silenced(f *ast.Field) bool {
 	for _, cg := range []*ast.CommentGroup{f.Doc, f.Comment} {
 		if cg == nil {
@@ -91,6 +99,9 @@ func silenced(f *ast.Field) bool {
 		}
 		for _, c := range cg.List {
 			if strings.Contains(c.Text, "nolint:omitemptyscalar") {
+				return true
+			}
+			if _, reason, ok := strings.Cut(c.Text, ignoreMarker); ok && strings.TrimSpace(reason) != "" {
 				return true
 			}
 		}

@@ -60,6 +60,9 @@ const (
 	RuleToolPin         = "tool-pin"             // a gate tool runs on PATH, at @latest, or at an unset version
 	RuleFuzzCoverage    = "fuzz-coverage"        // a Fuzz function the fuzz target does not run
 	RuleCIAuditSchedule = "ci-audit-schedule"    // no workflow runs make audit on a schedule
+	RuleDupeGate        = "dupe-gate"            // the dupe gate's jscpd run has no threshold of 3% or less
+	RuleDeadcodeGate    = "deadcode-gate"        // the deadcode gate skips, or traces from the wrong roots for the repo's shape
+	RuleDeadcodeFilter  = values.FilterRule      // a deadcode target filters output without an allow-list exception
 	RuleHookExitDiscard = "hook-exit-discard"    // a hook swallows a tool's exit status with nothing that surfaces the failure
 )
 
@@ -83,6 +86,8 @@ func Run(dir string) []Finding {
 
 	findings = append(findings, checkMakefile(dir, vals.Profile)...)
 	findings = append(findings, checkGateSteps(dir)...)
+	findings = append(findings, checkDupeGate(dir)...)
+	findings = append(findings, checkDeadcodeGate(dir, vals)...)
 	findings = append(findings, checkFuzzCoverage(dir)...)
 	findings = append(findings, checkLintFloor(dir)...)
 	findings = append(findings, checkLintSet(dir, vals)...)
@@ -187,8 +192,8 @@ func applyExceptions(findings []Finding, vals values.Values) []Finding {
 	}
 	excepted := make(map[string]bool, len(vals.Exceptions))
 	for _, e := range vals.Exceptions {
-		if len(e.Drop) > 0 {
-			continue // excuses only the linters it names; lint-set reads it
+		if len(e.Drop) > 0 || len(e.Allow) > 0 {
+			continue // excuses only what it names; lint-set and deadcode-filter read it
 		}
 		excepted[e.Rule] = true
 		if e.Rule == RuleNoGitOps {

@@ -3,6 +3,7 @@ package checks
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -56,7 +57,7 @@ func fixGolangci(dir string) (string, error) {
 	}
 	if _, err := os.Lstat(path); err == nil {
 		return "", nil
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("stat %s: %w", golangciFile, err)
 	}
 	// O_EXCL: never replace a file that appeared since the check above.
@@ -91,7 +92,12 @@ func fixLintPack(dir string) (string, error) {
 	if lintpack.UsesAtomicfile(dir) {
 		rules += ",${base-path}/" + lintpack.Dir + "/" + rawStateWriteFile // this repo requires atomicfile: rule 2 must run
 	}
-	return fmt.Sprintf(`created %s — the lintbrush rules pack repo-standard ships; enable gocritic's ruleguard check in .golangci.yml with rules: %q`, lintpack.Dir, rules), nil
+	msg := fmt.Sprintf(`created %s — the lintbrush rules pack repo-standard ships; enable gocritic's ruleguard check in .golangci.yml with rules: %q`, lintpack.Dir, rules)
+	if ruleguardDSLFindings(dir) != nil {
+		// go.mod is a person's file and the checksums need the network: say the command rather than edit it.
+		msg += "; then run `go get -tool " + ruleguardDSL + "@" + ruleguardDSLVersion + "` so go.mod keeps the dsl the pack imports"
+	}
+	return msg, nil
 }
 
 // fixReadme writes a README.md skeleton when the repo root carries none.
@@ -108,7 +114,7 @@ func fixReadme(dir string) (string, error) {
 	path := filepath.Join(abs, ReadmeFile)
 	if _, err := os.Stat(path); err == nil {
 		return "", nil // present — its heading and prose are a person's business
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("stat %s: %w", ReadmeFile, err)
 	}
 	// 0o600: the file is world-readable the moment git tracks it, so a wider
@@ -132,7 +138,7 @@ func fixCheckWorkflow(dir string) (string, error) {
 	path := filepath.Join(dir, ciGateFile)
 	if _, err := os.Stat(path); err == nil {
 		return "", nil
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("stat %s: %w", ciGateFile, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {

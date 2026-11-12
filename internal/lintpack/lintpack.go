@@ -18,6 +18,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -190,7 +191,7 @@ func Create(dir string) (bool, error) {
 	target := filepath.Join(dir, Dir)
 	if _, err := os.Lstat(target); err == nil {
 		return false, nil
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return false, fmt.Errorf("stat %s: %w", Dir, err)
 	}
 	tmp, err := os.MkdirTemp(dir, Dir+".tmp-")

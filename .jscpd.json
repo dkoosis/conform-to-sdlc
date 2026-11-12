@@ -1,7 +1,13 @@
 {
   "gitignore": true,
+  "threshold": 3,
+  "format": ["go"],
   "ignore": [
+    "**/.git/**",
+    "**/.beads/**",
+    "**/.claude/**",
     "**/.sandbox/**",
+    "**/.golangci-rules/**",
     "**/internal/lintpack/_gorules/**",
     "**/node_modules/**",
     "**/testdata/**",

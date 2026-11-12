@@ -72,11 +72,12 @@ standard-local: ## Run repo-standard --local (machine wiring: hooksPath, bd hook
 vuln: ## Scan for known vulnerabilities (govulncheck, pinned)
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VER) ./...
 
-# jscpd's --gitignore flag no longer exists (silent no-op in older Makefiles);
-# --ignore with explicit globs is the working form.
+# jscpd exits 0 at any duplication without a threshold (dupe-gate): 3% here and in
+# .jscpd.json. A --ignore flag would replace .jscpd.json's ignore list, so the
+# ignores live only there.
 JSCPD_VER ?= 5.1.2
 dupe: ## Check for code duplication (jscpd, pinned)
-	TMP_JSCPD=$$(mktemp -d); npx --yes jscpd@$(JSCPD_VER) . --ignore "**/.git/**,**/.sandbox/**,**/.beads/**" --output $$TMP_JSCPD; rm -rf $$TMP_JSCPD
+	TMP_JSCPD=$$(mktemp -d); npx --yes jscpd@$(JSCPD_VER) . --threshold 3 --output $$TMP_JSCPD; rm -rf $$TMP_JSCPD
 
 nilcheck: ## Run nilaway (pinned)
 	go run go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VER) -include-pkgs=github.com/dkoosis/repo-standard ./...

@@ -217,8 +217,13 @@ func TestScaffoldStandardRunsThisTool(t *testing.T) {
 		t.Fatalf("scaffolded Makefile has no standard target:\n%s", mk)
 	}
 	lines := strings.SplitN(after, "\n", 3)
-	if len(lines) < 2 || lines[1] != "\trepo-standard" {
-		t.Errorf("standard recipe = %q; want %q", lines[1], "\trepo-standard")
+	// The PATH form trips tool-pin in a repo that pins the checker; the scaffold writes the pinned go run form.
+	const want = "\tgo run github.com/dkoosis/repo-standard/cmd/repo-standard@$(REPO_STANDARD_VER)"
+	if len(lines) < 2 || lines[1] != want {
+		t.Errorf("standard recipe = %q; want %q", lines[1], want)
+	}
+	if !strings.Contains(mk, "\nREPO_STANDARD_VER := v") {
+		t.Error("scaffolded Makefile does not set REPO_STANDARD_VER")
 	}
 }
 
@@ -239,6 +244,20 @@ func TestScaffoldAuditGatesCheckSomething(t *testing.T) {
 	} {
 		if !strings.Contains(mk, want) {
 			t.Errorf("scaffolded Makefile lacks %q", want)
+		}
+	}
+}
+
+// TestScaffoldGoSumMatchesTheDSL: the checksums the scaffold writes are the
+// ones this module's own go.sum holds for the same dsl version.
+func TestScaffoldGoSumMatchesTheDSL(t *testing.T) {
+	data, err := os.ReadFile("../../go.sum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.SplitSeq(renderGoSum(ScaffoldSpec{}), "\n") {
+		if line != "" && !strings.Contains(string(data), line+"\n") {
+			t.Errorf("go.sum lacks the scaffold's line %q", line)
 		}
 	}
 }

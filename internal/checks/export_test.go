@@ -79,3 +79,9 @@ func RootStrayNames() []string {
 
 // TrackedHookEvents returns the events repo-standard requires a tracked hook for.
 func TrackedHookEvents() []string { return trackedHookEvents }
+
+// Dupe and deadcode gate hooks.
+var (
+	CheckDupeGate     = checkDupeGate
+	CheckDeadcodeGate = checkDeadcodeGate
+)

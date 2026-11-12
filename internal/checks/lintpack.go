@@ -2,8 +2,11 @@ package checks
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -77,7 +80,90 @@ func checkLintPack(dir string) []Finding {
 			})
 		}
 	}
-	return append(findings, rawStateWriteGlobFindings(dir, usesAtomicfile)...)
+	findings = append(findings, rawStateWriteGlobFindings(dir, usesAtomicfile)...)
+	return append(findings, ruleguardDSLFindings(dir)...)
+}
+
+// ruleguardDSL is the package the pack's rule files import. They sit in a
+// dot-directory the go tool never builds, so nothing keeps the module in
+// go.mod: `go mod tidy` drops a bare require, and gocritic's ruleguard then
+// fails to load the pack ("could not import .../dsl").
+const (
+	ruleguardDSL        = "github.com/quasilyte/go-ruleguard/dsl"
+	ruleguardDSLVersion = "v0.3.23"
+	ruleguardDSLSum     = "h1:lxjt5B6ZCiBeeNO8/oQsegE6fLeCzuMRoVWSkXC4uvY="
+	ruleguardDSLModSum  = "h1:KeCP03KrjuSO0H1kTuZQCWlQPulDV6YMIXmpQss17rU="
+)
+
+var (
+	dslToolLine   = regexp.MustCompile(`(?m)^\s*(?:tool\s+)?` + regexp.QuoteMeta(ruleguardDSL) + `\s*$`)
+	dslToolSingle = regexp.MustCompile(`(?m)^tool\s+` + regexp.QuoteMeta(ruleguardDSL) + `\s*$`)
+	dslToolBlock  = regexp.MustCompile(`(?s)(?:^|\n)tool\s*\(.*?\n\)`)
+	dslRequire    = regexp.MustCompile(`(?m)^(?:require\s+)?\s*` + regexp.QuoteMeta(ruleguardDSL) + `\s+v`)
+	dslImport     = regexp.MustCompile(`(?m)^(?:import\s+)?\s*(?:_\s+)?"` + regexp.QuoteMeta(ruleguardDSL) + `"`)
+)
+
+// ruleguardDSLFindings reports a repo with go.mod and the pack whose go.mod
+// does not keep the ruleguard dsl: it needs a `tool` directive for it, or a
+// require plus a tools.go-style file that imports it. A repo with no go.mod
+// is not a Go module this rule can read.
+func ruleguardDSLFindings(dir string) []Finding {
+	mod, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return nil
+	}
+	text := string(mod)
+	tooled := dslToolSingle.MatchString(text)
+	for _, block := range dslToolBlock.FindAllString(text, -1) {
+		tooled = tooled || dslToolLine.MatchString(block)
+	}
+	if tooled && dslRequire.MatchString(text) {
+		return nil
+	}
+	if !tooled && dslRequire.MatchString(text) && importsDSL(dir) {
+		return nil
+	}
+	return []Finding{{
+		File:   "go.mod",
+		Rule:   RuleLintPack,
+		Msg:    "go.mod does not keep " + ruleguardDSL + " (a tool directive, or a require plus a file that imports it): gocritic's ruleguard cannot load the pack and golangci-lint fails with \"could not import\"",
+		Repair: "go get -tool " + ruleguardDSL + "@" + ruleguardDSLVersion + " (adds the tool line and the require)",
+	}}
+}
+
+// skipDSLDir says whether importsDSL passes over a subdirectory: a hidden,
+// underscore, vendor or testdata directory, or a nested module, whose imports
+// do not satisfy the root go.mod.
+func skipDSLDir(path, name string) bool {
+	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || slices.Contains(sourceSkipDirs, name) {
+		return true
+	}
+	_, err := os.Stat(filepath.Join(path, "go.mod"))
+	return err == nil
+}
+
+// importsDSL says whether a Go file outside hidden directories, vendor and
+// testdata imports the ruleguard dsl (a tools.go with `import _ "..."`).
+func importsDSL(dir string) bool {
+	found := false
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error { //nolint:errcheck // the callback never errs
+		if err != nil || found {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			if path != dir && skipDSLDir(path, d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") || strings.HasPrefix(d.Name(), "_") {
+			return nil
+		}
+		src, err := os.ReadFile(path) //nolint:gosec // G304: path comes from walking the repo
+		found = err == nil && dslImport.Match(src) && !buildIgnore.Match(src)
+		return nil
+	})
+	return found
 }
 
 // missingPackFile is the finding for a pack file the repo must hold and does
